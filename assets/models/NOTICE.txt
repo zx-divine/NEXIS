@@ -1,0 +1,9 @@
+NEXIS offline speech model distribution
+
+Model: vosk-model-small-en-us-0.15, unmodified model data.
+Publisher/source: Alpha Cephei / Vosk, https://alphacephei.com/vosk/models
+Archive: https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip
+The publisher lists this model under Apache License 2.0.
+A copy of that license and the upstream model README are included.
+Original model data is not claimed as NEXIS artwork or authorship.
+Model data is an independent component; Windows SAPI voices remain OS components.

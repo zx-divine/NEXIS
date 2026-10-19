@@ -1,0 +1,8 @@
+PySide6-Essentials>=6.12,<6.13
+vosk>=0.3.45,<0.4
+sounddevice>=0.5,<0.6
+pywin32>=311,<313; sys_platform == "win32"
+
+google-genai==2.31.0
+Send2Trash==2.1.0
+websocket-client==1.9.0

@@ -1,0 +1,65 @@
+from threading import Event
+
+from PySide6.QtCore import QThread, Signal
+
+from nexis.actions.files import search
+from nexis.core.permissions import Permissions
+from nexis.core.router import Engine
+from nexis.core.results import Result
+
+
+class CommandWorker(QThread):
+    finished_result = Signal(object)
+    permission = Signal(object)
+    phase = Signal(str)
+    step = Signal(int, object)
+
+    def __init__(self, db, text, platform=None):
+        super().__init__()
+        self.db, self.text, self.platform = db, text, platform
+        self.cancel = Event()
+        self.answer = Event()
+        self.allowed = False
+
+    def confirm(self, preview):
+        self.answer.clear()
+        self.allowed = False
+        self.permission.emit(preview)
+        while not self.answer.wait(0.1):
+            if self.cancel.is_set():
+                return False
+        return self.allowed and not self.cancel.is_set()
+
+    def respond(self, allowed):
+        self.allowed = allowed
+        self.answer.set()
+
+    def run(self):
+        try:
+            engine = Engine(self.db, self.platform, Permissions(self.confirm))
+            result = engine.execute(self.text, self.cancel, self.step.emit, self.phase.emit)
+        except Exception as exc:
+            import logging
+
+            logging.getLogger("nexis").error("Worker failed (%s)", type(exc).__name__)
+            result = Result(False, "Unexpected failure. See local diagnostics.")
+        self.finished_result.emit(result)
+
+
+class SearchWorker(QThread):
+    completed = Signal(object)
+    progress = Signal(int)
+    failed = Signal(str)
+
+    def __init__(self, roots, query, extension):
+        super().__init__()
+        self.roots, self.query, self.extension = roots, query, extension
+        self.cancel = Event()
+
+    def run(self):
+        try:
+            self.completed.emit(
+                search(self.roots, self.query, self.extension, self.cancel, self.progress.emit)
+            )
+        except (ValueError, OSError) as exc:
+            self.failed.emit(str(exc))

@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nexis-desktop"
+version = "1.3.2"
+description = "Local-first Windows command center"
+requires-python = ">=3.11,<3.14"
+dependencies = ["PySide6-Essentials>=6.12,<6.13", "vosk>=0.3.45,<0.4", "sounddevice>=0.5,<0.6", "google-genai==2.31.0", "Send2Trash==2.1.0", "websocket-client==1.9.0", "pywin32>=311,<313; sys_platform == 'win32'"]
+
+[project.optional-dependencies]
+voice = ["vosk>=0.3.45,<0.4", "sounddevice>=0.5,<0.6"]
+dev = ["pytest>=8,<10", "pytest-qt>=4.4,<5", "ruff>=0.9,<1", "pyinstaller>=6.11,<7", "Pillow>=11,<13"]
+
+[project.gui-scripts]
+nexis = "nexis.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"nexis.ui" = ["*.qss"]
+"nexis" = ["assets/branding/*.png", "assets/branding/*.ico"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]

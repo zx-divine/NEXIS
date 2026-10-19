@@ -1,0 +1,25 @@
+QWidget { background: #080304; color: #F4E9E5; font-family: 'Segoe UI'; font-size: 13px; }
+QMainWindow, QWidget#dashboard { background: #030303; }
+QLabel { background: transparent; }
+QLabel#brand { color: #FF2338; font-size: 30px; font-weight: 700; letter-spacing: 2px; }
+QLabel#pageTitle { font-size: 26px; font-weight: 600; color: #F4E9E5; padding: 8px 0; }
+QLabel#hudLabel { font-family: 'Consolas'; font-size: 11px; color: #D4AF37; letter-spacing: 1px; }
+QLabel#technical { font-family: 'Consolas'; font-size: 11px; color: #B59B9A; }
+QLabel#goldText { color: #FFD76A; font-family: 'Consolas'; font-size: 17px; }
+QPushButton { background: #120607; color: #F4E9E5; border: 1px solid #8B0000; padding: 8px 12px; border-radius: 0; }
+QPushButton:hover { background: #2B0B10; color: #FFD76A; border-color: #FF2338; }
+QPushButton:focus, QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus, QComboBox:focus,
+QSpinBox:focus, QListWidget:focus, QTableWidget:focus { border: 2px solid #D4AF37; }
+QPushButton:disabled { color: #8A7373; border-color: #3C1318; background: #0D0506; }
+QPushButton#execute { background: #8B0000; color: #FFF1E9; font-weight: 700; border-color: #FF2338; }
+QLineEdit, QPlainTextEdit, QTextEdit, QComboBox, QSpinBox, QListWidget, QTableWidget {
+background: #0D0506; color: #F4E9E5; border: 1px solid #570000; border-radius: 0;
+padding: 7px; selection-background-color: #8B0000; selection-color: #FFF4E8; }
+QPlainTextEdit { font-family: 'Consolas'; font-size: 12px; }
+QHeaderView::section { background: #20090D; color: #D4AF37; padding: 8px; border: 1px solid #570000; }
+QScrollArea { border: 0; background: #030303; }
+QScrollBar:vertical { background: #120607; width: 10px; }
+QScrollBar::handle:vertical { background: #8B0000; min-height: 25px; }
+QCheckBox { padding: 5px; }
+QToolTip { background: #20090D; color: #F4E9E5; border: 1px solid #D4AF37; }
+QMessageBox QLabel { min-width: 300px; }
