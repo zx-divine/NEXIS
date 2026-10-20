@@ -16,7 +16,7 @@ Baseline source/remote: b2a0cac595c48ee3e448660db7c5f4d4d5b458c8. The fresh base
 | Voice Studio and session controls | PARTIALLY WORKING | A component checks passed below; physical device changes and natural speech still pending |
 | Multi-provider chat/context/streaming | PARTIALLY WORKING | Existing mocks/SDK transport fixtures pass; live provider availability is not claimed |
 | Risk-based launch permissions | WORKING in regression tests | Validated normal installed apps avoid duplicate approvals; sensitive operations remain reviewed |
-| Identity engine | MISSING | Application identity must become NEXIS / ASH; actual selected provider/model must be resolved truthfully |
+| Identity engine | WORKING in automated tests | NEXIS / ASH facts resolved locally; validated selected model is identified as configuration, not proof of live availability |
 | PC Health | PARTIALLY WORKING | Existing CPU/RAM/uptime measured; advanced health fields/top processes still pending |
 | Smart local memory | MISSING | Existing settings/snippets/history are not a complete user-controlled memory system |
 | File Finder | PARTIALLY WORKING | Approved-root filename/extension search exists; metadata filters/index management pending |
@@ -41,6 +41,17 @@ Baseline source/remote: b2a0cac595c48ee3e448660db7c5f4d4d5b458c8. The fresh base
 Evidence is local: milestone-a-tests.txt, milestone-a-result.json, controlled-speech.json, native fixture baseline and dependency install report under .verification-launch-v1. Source publication must be credential-scanned and verified, with SHA recorded in the local continuation report. The 1.3.2 installer remains the previous verified build until F produces a new candidate.
 
 ## Dependent implementation plan
+
+### Milestone B — Agent foundation source checkpoint
+
+Milestone A was pushed and verified at **81b5c6f5b2e2247c6826abd085c71dce221aa9c4**. The owner deferred real hardware testing; keep those gates pending and continue independent work.
+
+- Added a small identity module: application NEXIS, creator ASH, desktop-assistance purpose. Whole identity questions are answered locally without requiring credentials, network access or tool permissions. Compound requests remain in the ordinary validated operator path.
+- Runtime identification reads the active encrypted profile without changing it. It reports the configured adapter/model honestly; unknown, invalid, excessively long, control-character or credential-bearing model labels are not claimed. No gateway upstream attribution or model availability is invented.
+- Operator system instructions separate immutable application facts from provider configuration and untrusted content. This does not grant permissions. The Chat page and header refresh their selected-provider labels after explicit selection, editing or removal; running requests retain their existing provider snapshot.
+- Compatible model-list GETs retry at most once after HTTP 429/502/503/504. Retry-After must fit the short cancellation-aware bound; longer waits remain manual. Generation POSTs, partial streams, ambiguous connection failures, authentication failures and configuration failures are never automatically replayed. No provider fallback was added.
+
+**Actual checks:** 33 new targeted tests passed; complete source regression **311 passed, 1 skipped**, 64.47 seconds. Ruff and whitespace checks passed. Tests use disposable encrypted profiles, injected transports and Qt controls; they do not establish live Gemini/OmniRoute inference or physical audio. The previous 1.3.2 installer still predates milestones A and B. Milestones C–F remain incomplete.
 
 | Milestone | Next work / affected areas | Acceptance and risks |
 |---|---|---|

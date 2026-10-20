@@ -1,6 +1,7 @@
 """Bounded compatible chat client. Provider text never executes OS commands."""
 
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -211,6 +212,44 @@ class RejectRedirect(urllib.request.HTTPRedirectHandler):
         )
 
 
+def discovery_retry_delay(status, headers=None):
+    """At most one short retry of a rejected read-only model-list request.
+
+    Respect longer/server-date Retry-After values by leaving Retry to the user.
+    Generation, partial responses, connection failures and auth are never replayed.
+    """
+    if status not in {429, 502, 503, 504}:
+        return None
+    value = (headers or {}).get("Retry-After")
+    if value is None:
+        return 1.0
+    try:
+        delay = float(value)
+    except (ValueError, TypeError):
+        return None
+    return delay if math.isfinite(delay) and 0 <= delay <= 2 else None
+
+
+def open_with_discovery_retry(open_request, request, cancel, timeout, deadline):
+    for attempt in range(2):
+        if cancel.is_set():
+            raise ProviderError("CANCELLED", "Provider request cancelled.")
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            raise ProviderError("TIMEOUT", "Provider request deadline exceeded.")
+        try:
+            return open_request(request, timeout=min(timeout, remaining))
+        except urllib.error.HTTPError as exc:
+            delay = (discovery_retry_delay(exc.code, exc.headers)
+                     if request.get_method() == "GET" and attempt == 0 else None)
+            if delay is None or deadline - monotonic() <= delay:
+                raise
+            exc.close()
+            if cancel.wait(delay):
+                raise ProviderError("CANCELLED", "Model refresh cancelled.") from None
+    raise AssertionError("Unreachable retry state")
+
+
 def request_json(
     profile, route, cancel, payload=None, timeout=10, opener=None, on_chunk=lambda text: None
 ):
@@ -240,9 +279,9 @@ def request_json(
         if urlsplit(config["endpoint"]).hostname in {"localhost", "127.0.0.1", "::1"}:
             handlers.append(urllib.request.ProxyHandler({}))
         open_request = opener or urllib.request.build_opener(*handlers).open
-        with open_request(req, timeout=timeout) as response:
+        deadline = monotonic() + min(150, timeout + 30)
+        with open_with_discovery_retry(open_request, req, cancel, timeout, deadline) as response:
             chunks, size = [], 0
-            deadline = monotonic() + min(150, timeout + 30)
             stream = (
                 SSECollector(config, on_chunk)
                 if payload

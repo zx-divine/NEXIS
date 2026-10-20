@@ -41,6 +41,7 @@ from nexis.ui.setup_services import DiscoveryPanel, start_chat, safe_ui
 from nexis.core.models import detect_model
 from nexis.ui.providers_page import AIProvidersPage
 from nexis.core.privacy import sanitize_request
+from nexis.core.identity import is_identity_question, identity_reply, provider_label
 
 
 class MainWindow(QMainWindow):
@@ -133,6 +134,9 @@ class MainWindow(QMainWindow):
         self.add_page("History", self.history_page)
         self.providers = AIProvidersPage(self.data_dir)
         self.add_page("AI Providers", self.providers)
+        self.providers.changed.connect(self.refresh_provider_identity)
+        self.providers.profile_saved.connect(self.refresh_provider_identity)
+        self.refresh_provider_identity()
         self.settings_page = SettingsPage(self)
         self.add_page("Settings", self.settings_page)
         about = QWidget()
@@ -518,6 +522,18 @@ class MainWindow(QMainWindow):
         if not (self.worker and self.worker.isRunning()):
             self.set_state(ReactorState.IDLE)
 
+    def selected_profile(self):
+        try:
+            return self.providers.manager.active()
+        except ValueError:
+            return None  # Preserve unreadable encrypted configuration; never replace it.
+
+    def refresh_provider_identity(self):
+        label = "SELECTED: " + provider_label(self.selected_profile())
+        self.nav_hint.setText(label[:95])
+        self.nav_hint.setToolTip(label + "\nSaved configuration, not a live model verification. An active request keeps its original provider snapshot.")
+        self.chat.provider_status.setText(label)
+
     def conversation_request(self, text, origin):
         text = sanitize_request(text)
         if self.closing:
@@ -532,6 +548,11 @@ class MainWindow(QMainWindow):
         self.conversation_history = self.conversation_history[-24:]
         if origin == "voice":
             self.voice.thinking()
+        if is_identity_question(text) and not any(job.isRunning() for job in self.ai_jobs):
+            # Local application facts do not need a cloud key or tool permissions.
+            # Ordinary and compound requests still follow the existing operator.
+            self.ai_reply(identity_reply(self.selected_profile()), origin)
+            return
         start_chat(self, text, origin)
 
     def ai_reply(self, text, origin=None):

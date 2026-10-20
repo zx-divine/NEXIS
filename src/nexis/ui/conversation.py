@@ -39,6 +39,11 @@ class ChatPage(QWidget):
             "TEXT UPLINK",
             "Selected online provider · validated Windows tools · session-only messages",
         )
+        self.provider_status = QLabel()
+        self.provider_status.setTextFormat(Qt.PlainText)
+        self.provider_status.setWordWrap(True)
+        self.provider_status.setAccessibleName("Selected AI provider and configured model")
+        layout.addWidget(self.provider_status)
         self.messages = QListWidget()
         self.messages.setWordWrap(True)
         self.messages.setAccessibleName("Chat messages")
