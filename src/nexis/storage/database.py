@@ -60,7 +60,7 @@ class Database:
                         "Database integrity check failed; preserve the file for recovery."
                     )
                 version = self.connection.execute("PRAGMA user_version").fetchone()[0]
-                if version > 3:
+                if version > 4:
                     raise StorageError("This database requires a newer NEXIS version.")
                 if version == 0:
                     self.connection.executescript("""
@@ -99,8 +99,19 @@ class Database:
                 self.connection.execute(
                     "DELETE FROM settings WHERE key IN ('offline_mode','is_offline','connectivity_state','local_ai_fallback')"
                 )
-                self.connection.execute("PRAGMA user_version=3")
+                self.connection.execute(
+                    "CREATE TABLE IF NOT EXISTS local_memories (id TEXT PRIMARY KEY, kind TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)"
+                )
+                self.connection.execute(
+                    "CREATE TABLE IF NOT EXISTS document_index (path TEXT PRIMARY KEY, bytes INTEGER NOT NULL, modified_ns INTEGER NOT NULL, body TEXT NOT NULL)"
+                )
+                self.connection.execute("PRAGMA user_version=4")
+        except StorageError:
+            self.connection.close()
+            raise
         except sqlite3.DatabaseError as exc:
+            if hasattr(self, "connection"):
+                self.connection.close()
             raise StorageError(
                 "Cannot open local database. It may be locked, corrupt or inaccessible. "
                 "The existing file was not replaced."

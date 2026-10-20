@@ -4,7 +4,7 @@ import hashlib
 import os
 from pathlib import Path
 
-from nexis.actions.files import scoped, is_link, search
+from nexis.actions.files import scoped, is_link, search, SearchFilters
 from nexis.utils.validation import approved_root
 
 TEXT_SUFFIXES = {".txt", ".md", ".csv", ".json", ".log", ".rtf"}
@@ -110,8 +110,9 @@ def perform(operation, args, roots, cancel, data_dir):
     if cancel.is_set():
         raise ValueError("File operation cancelled.")
     if operation == "search":
-        report = search(roots, args["query"], args.get("extension", ""), cancel, limit=100)
-        return {"paths": report.paths, "limited": report.limited, "cancelled": report.cancelled}
+        filters = SearchFilters(**{key: args[key] for key in ("min_bytes", "max_bytes", "modified_after", "modified_before") if key in args})
+        report = search(roots, args["query"], args.get("extension", ""), cancel, limit=100, filters=filters)
+        return {"paths": report.paths, "metadata": report.metadata, "limited": report.limited, "cancelled": report.cancelled}
     new = operation in {"create_folder", "create_text"}
     path = safe_path(args["path"], roots, new=new, data_dir=data_dir)
     if operation == "properties":

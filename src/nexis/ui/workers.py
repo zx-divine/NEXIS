@@ -51,15 +51,17 @@ class SearchWorker(QThread):
     progress = Signal(int)
     failed = Signal(str)
 
-    def __init__(self, roots, query, extension):
+    def __init__(self, roots, query, extension, filters=None, access_check=lambda: None):
         super().__init__()
         self.roots, self.query, self.extension = roots, query, extension
         self.cancel = Event()
+        self.filters, self.access_check = filters, access_check
 
     def run(self):
         try:
             self.completed.emit(
-                search(self.roots, self.query, self.extension, self.cancel, self.progress.emit)
+                search(self.roots, self.query, self.extension, self.cancel, self.progress.emit,
+                       filters=self.filters, access_check=self.access_check)
             )
         except (ValueError, OSError) as exc:
             self.failed.emit(str(exc))

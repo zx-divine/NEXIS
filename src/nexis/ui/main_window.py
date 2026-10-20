@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 from time import perf_counter
@@ -42,6 +43,8 @@ from nexis.core.models import detect_model
 from nexis.ui.providers_page import AIProvidersPage
 from nexis.core.privacy import sanitize_request
 from nexis.core.identity import is_identity_question, identity_reply, provider_label
+from nexis.ui.memory_page import MemoryPage
+from nexis.ui.health_page import HealthPage
 
 
 class MainWindow(QMainWindow):
@@ -130,6 +133,10 @@ class MainWindow(QMainWindow):
             self.add_page(title, page)
         self.files = FilesPage(self)
         self.add_page("Files", self.files)
+        self.memories = MemoryPage(self)
+        self.add_page("Local Memory", self.memories)
+        self.health = HealthPage(self)
+        self.add_page("PC Health", self.health)
         self.history_page = HistoryPage(self)
         self.add_page("History", self.history_page)
         self.providers = AIProvidersPage(self.data_dir)
@@ -548,12 +555,31 @@ class MainWindow(QMainWindow):
         self.conversation_history = self.conversation_history[-24:]
         if origin == "voice":
             self.voice.thinking()
+        memory_request = re.fullmatch(r"(remember|forget) this(?::\s*|\s+)(.+)", text, re.IGNORECASE | re.DOTALL)
+        if memory_request and memory_request[1].casefold() == "remember":
+            self.memories.draft(memory_request[2].strip())
+            self.navigate("Local Memory")
+            self.local_page_reply("Memory draft prepared locally. Review it in Local Memory and click Save approved memory. Nothing has been saved or sent to AI.", origin)
+            return
+        if memory_request and memory_request[1].casefold() == "forget":
+            self.memories.query.setText(memory_request[2].strip()[:300])
+            self.navigate("Local Memory")
+            self.local_page_reply("Matching memories are shown locally. Select the intended note and confirm Delete selected. Nothing has been deleted or sent to AI.", origin)
+            return
         if is_identity_question(text) and not any(job.isRunning() for job in self.ai_jobs):
             # Local application facts do not need a cloud key or tool permissions.
             # Ordinary and compound requests still follow the existing operator.
             self.ai_reply(identity_reply(self.selected_profile()), origin)
             return
         start_chat(self, text, origin)
+
+    def local_page_reply(self, text, origin):
+        # Navigating away cancels the voice generation. Do not start hidden speech
+        # or a hands-free follow-up from a memory-management acknowledgement.
+        self.ai_reply(text, "chat")
+        if origin == "voice":
+            self.voice.response.setPlainText(text)
+            self.voice.change_state("IDLE")
 
     def ai_reply(self, text, origin=None):
         text = sanitize_request(text)
@@ -639,6 +665,9 @@ class MainWindow(QMainWindow):
         return [
             self.worker,
             self.files.worker,
+            *self.files.index_jobs,
+            *self.memories.jobs,
+            *self.health.jobs,
             self.voice.worker,
             *self.ai_jobs,
             *self.discovery.jobs,

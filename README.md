@@ -24,6 +24,10 @@ Authentication, DNS, TLS, timeout, connection, rate-limit, model/endpoint, serve
 
 ## Windows actions
 
+The **PC Health** page provides an on-demand, read-only local snapshot without administrator access or internet probes. Unsupported temperatures and inaccessible process data are shown as unavailable. **Local Memory** stores only notes you approve; `remember this: ...` drafts a note for review, while `forget this: ...` searches for a note you can confirm deleting. Memory is not automatically added to AI requests. Keep notes and private plaintext exports free of secrets.
+
+**Files** searches approved folders with optional extension, byte-size and UTC modification-date filters. Use `*` to filter all filenames. Optional local text indexing needs separate approval and supports bounded UTF-8 `.txt`/`.md` documents only; it does not parse PDF/Office files, execute contents or upload documents. Changed or unapproved files are excluded. Delete the index to remove cached text; private backups may retain older copies.
+
 The online planner produces validated tool calls or structured plans. Application discovery, websites, visible-window management, approved-folder file operations, Windows settings navigation, volume/mute, clipboard writes and saved workflows use a typed tool registry. Multi-step requests are bounded and stop on failure or cancellation.
 
 Manual commands remain available in the command drawer. They are explicit OS tools, not an offline AI interpreter or fallback. Chat and voice use the selected online provider.

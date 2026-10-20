@@ -1,4 +1,6 @@
 from pathlib import Path
+from datetime import datetime, timezone, timedelta
+from PySide6.QtCore import Qt
 
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -14,7 +16,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from nexis.actions.files import scoped
+from nexis.actions.files import scoped, SearchFilters
+from nexis.core.access import require_access
 from nexis.core.results import Preview, Risk
 from nexis.ui import dialogs
 from nexis.ui.workers import SearchWorker
@@ -241,6 +244,9 @@ class FilesPage(QWidget):
     def __init__(self, window):
         super().__init__()
         self.window, self.worker = window, None
+        self.index_jobs = []
+        from nexis.storage.document_index import DocumentIndex
+        self.index_store = DocumentIndex(window.db)
         layout = QVBoxLayout(self)
         heading(
             layout,
@@ -259,24 +265,76 @@ class FilesPage(QWidget):
         self.start_button = button("Search", self.start, row)
         button("Cancel search", self.cancel, row)
         layout.addLayout(row)
+        filters = QHBoxLayout()
+        self.min_size = QLineEdit()
+        self.min_size.setPlaceholderText("Minimum bytes (optional)")
+        self.max_size = QLineEdit()
+        self.max_size.setPlaceholderText("Maximum bytes (optional)")
+        self.after = QLineEdit()
+        self.after.setPlaceholderText("Modified from YYYY-MM-DD (UTC)")
+        self.before = QLineEdit()
+        self.before.setPlaceholderText("Through YYYY-MM-DD (UTC)")
+        for field in (self.min_size, self.max_size, self.after, self.before):
+            field.setAccessibleName(field.placeholderText())
+            filters.addWidget(field)
+        layout.addLayout(filters)
         self.status = QLabel("Approve folders in Settings to begin.")
         layout.addWidget(self.status)
         self.results = QListWidget()
         self.results.setWordWrap(True)
         layout.addWidget(self.results)
+        self.metadata = QLabel("Select a result for safe size/date metadata. Use * as the filename to filter all names.")
+        self.metadata.setTextFormat(Qt.PlainText)
+        self.metadata.setWordWrap(True)
+        self.results.currentTextChanged.connect(self.preview_metadata)
+        layout.addWidget(self.metadata)
+        self.result_metadata = {}
         button("Open selected file location", self.open_location, layout)
+        row = QHBoxLayout()
+        self.content_query = QLineEdit()
+        self.content_query.setPlaceholderText("Optional local text-index search")
+        self.content_query.setAccessibleName("Search previously indexed local document text")
+        row.addWidget(self.content_query)
+        button("Search indexed text", self.find_content, row)
+        button("Build / refresh text index…", self.build_index, row)
+        button("Delete text index…", self.clear_index, row)
+        layout.addLayout(row)
+        hint = QLabel("Opt-in index: UTF-8 .txt/.md only, 32 KB per file, 200 documents; bounded 5,000-candidate scan. Contents stay local in plaintext. No PDF/Office parsing, uploads or execution. Changed/unapproved files are excluded from results.")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
 
     def start(self):
         if self.worker and self.worker.isRunning():
             return
+        require_access(self.window.db, "approved_folder_access")
         roots = self.window.db.setting("search_roots")
         if not roots:
             self.status.setText("Add approved folders in Settings first.")
             return
+        def date_value(field, ending=False):
+            if not field.text().strip():
+                return None
+            try:
+                value = datetime.strptime(field.text().strip(), "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                return (value + timedelta(days=1, microseconds=-1) if ending else value).timestamp()
+            except ValueError:
+                raise ValueError("Use dates in YYYY-MM-DD format (UTC).") from None
+
+        try:
+            minimum = int(self.min_size.text()) if self.min_size.text().strip() else 0
+            maximum = int(self.max_size.text()) if self.max_size.text().strip() else None
+        except ValueError:
+            raise ValueError("File sizes must be whole numbers of bytes.") from None
+        filters = SearchFilters(minimum, maximum, date_value(self.after), date_value(self.before, True))
         self.results.clear()
         self.start_button.setEnabled(False)
         self.status.setText("Searching…")
-        self.worker = SearchWorker(roots, self.query.text(), self.extension.text())
+        def access_check():
+            require_access(self.window.db, "approved_folder_access")
+            if self.window.db.setting("search_roots") != roots:
+                raise ValueError("Approved folders changed. Search stopped; start again with current approvals.")
+
+        self.worker = SearchWorker(roots, self.query.text(), self.extension.text(), filters, access_check)
         self.worker.progress.connect(
             lambda count: self.status.setText(f"Searching… {count} files inspected")
         )
@@ -286,6 +344,7 @@ class FilesPage(QWidget):
         self.worker.start()
 
     def completed(self, report):
+        self.result_metadata = report.metadata
         self.results.addItems(report.paths)
         status = "Cancelled" if report.cancelled else "Complete"
         self.status.setText(
@@ -294,11 +353,66 @@ class FilesPage(QWidget):
             + ("Result limit reached; narrow your search." if report.limited else "")
         )
 
+    def preview_metadata(self, path):
+        value = self.result_metadata.get(path)
+        if value:
+            modified = datetime.fromtimestamp(value["modified"], timezone.utc).isoformat()
+            self.metadata.setText(f"{value['bytes']:,} bytes · Modified {modified}\n{path}"
+                                  + ("\nUntrusted indexed excerpt: " + value["excerpt"] if "excerpt" in value else ""))
+
+    def index_task(self, operation, callback):
+        from nexis.ui.setup_services import Task
+        if any(job.isRunning() for job in self.index_jobs):
+            self.status.setText("Wait for the current index operation, or cancel it.")
+            return
+        for old in self.index_jobs:
+            old.deleteLater()
+        self.index_jobs.clear()
+        task = Task(operation, self)
+        task.result.connect(callback)
+        task.failed.connect(self.status.setText)
+        self.index_jobs.append(task)
+        self.status.setText("Processing the local text index…")
+        task.start()
+
+    def build_index(self):
+        require_access(self.window.db, "approved_folder_access")
+        if QMessageBox.question(self, "Approve local text indexing?", "This copies supported document text from approved folders into your local plaintext database. Do not include sensitive folders; secret detection is best effort. Nothing is sent to AI. Build a bounded index and replace the previous cache?", QMessageBox.Yes | QMessageBox.No, QMessageBox.No) == QMessageBox.Yes:
+            self.index_task(lambda cancel, progress: self.index_store.build(cancel),
+                lambda report: self.status.setText(f"Indexed {report['indexed']} documents; {report['skipped']} skipped. " + ("Bounds reached; narrow approved folders for better coverage." if report["limited"] else "Local index ready.")))
+
+    def find_content(self):
+        require_access(self.window.db, "approved_folder_access")
+        query = self.content_query.text()
+
+        def loaded(rows):
+            self.results.clear()
+            self.result_metadata = {row["path"]: row for row in rows}
+            self.results.addItems([row["path"] for row in rows])
+            self.status.setText(f"{len(rows)} current, approved indexed matches. No file was opened or uploaded.")
+
+        self.index_task(lambda cancel, progress: self.index_store.find(query, cancel), loaded)
+
+    def clear_index(self):
+        for job in self.index_jobs:
+            if job.isRunning():
+                self.status.setText("Cancel and finish the index operation before deleting the cache.")
+                return
+        if QMessageBox.question(self, "Delete local text index?", "Delete cached document text? Original files are preserved. This is ordinary SQLite deletion, not forensic secure erasure.", QMessageBox.Yes | QMessageBox.No, QMessageBox.No) == QMessageBox.Yes:
+            self.index_store.clear()
+            self.results.clear()
+            self.result_metadata.clear()
+            self.metadata.clear()
+            self.status.setText("Text index deleted. Private backups may retain previous copies.")
+
     def cancel(self):
         if self.worker:
             self.worker.cancel.set()
+        for job in self.index_jobs:
+            job.cancel.set()
 
     def open_location(self):
+        require_access(self.window.db, "approved_folder_access")
         item = self.results.currentItem()
         if not item:
             raise ValueError("Select a file first.")

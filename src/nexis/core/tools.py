@@ -155,8 +155,10 @@ register(
 )
 register(
     "file_search",
-    "Find filenames only within explicitly approved folders (maximum 100 results).",
-    schema({"query": string(255), "extension": string(20)}, ["query"]),
+    "Find filenames within approved folders (maximum 100 results). Optional size bounds are bytes and modified bounds are Unix UTC seconds. Use * for all filenames with filters; never search outside approved folders.",
+    schema({"query": string(255), "extension": string(20),
+            **{key: {"type": "integer", "minimum": 0, "maximum": 1099511627776}
+               for key in ("min_bytes", "max_bytes", "modified_after", "modified_before")}}, ["query"]),
     "approved_folder_access",
     timeout=30,
 )

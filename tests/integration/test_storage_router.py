@@ -16,7 +16,7 @@ def test_database_persists_and_migrates(tmp_path):
     db = Database(path)
     assert db.setting("theme") == "light"
     assert db.rows("SELECT text FROM snippets")[0]["text"] == "Hello!"
-    assert db.rows("PRAGMA user_version")[0]["user_version"] == 3
+    assert db.rows("PRAGMA user_version")[0]["user_version"] == 4
     db.close()
 
 

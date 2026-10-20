@@ -313,7 +313,7 @@ def test_schema_one_migration_is_additive_and_idempotent(tmp_path):
     old.close()
     for _ in range(2):
         upgraded = Database(path)
-        assert upgraded.rows("PRAGMA user_version")[0]["user_version"] == 3
+        assert upgraded.rows("PRAGMA user_version")[0]["user_version"] == 4
         assert not upgraded.setting("history_enabled")
         assert upgraded.rows("SELECT text FROM snippets")[0]["text"] == "preserved"
         upgraded.close()

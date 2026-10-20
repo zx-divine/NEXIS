@@ -18,6 +18,8 @@ Selected-provider cloud chat and voice-chat transcripts are sent only through th
 
 Provider credentials are protected with Windows current-user DPAPI. Other SQLite data, command history, preferences and approved resources are plaintext under per-user AppLocalData with inherited Windows permissions. Keep backups private. SQL values are bound parameters; internal SQL identifiers are fixed/validated. Diagnostic exports omit private contents and credentials. Logs use fixed messages and error categories, not raw provider responses or secrets.
 
+Local Memory is opt-in per save/import and is never automatically sent to an AI provider. Memory commands only draft or search; deletion needs review. Obvious secret patterns are rejected, but this is not a complete data-loss-prevention system. Exports are private plaintext files. Optional document indexing separately requires visible consent and stores bounded supported text locally in SQLite; indexed content is untrusted data, never instructions or automatic AI context. Stale and unapproved paths are excluded from searches. Delete controls perform ordinary logical deletion, not forensic secure erasure; backups may retain previous text.
+
 Provider addresses require validated HTTPS except approved loopback HTTP local servers. Redirects are rejected, response sizes and IO timeouts are bounded, and cancellation is checked before executing actions. User-configured gateways remain a trust decision. Tool output, filenames and document contents are untrusted data and cannot grant permissions.
 
 ## Release qualification

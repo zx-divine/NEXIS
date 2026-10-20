@@ -18,7 +18,7 @@ def test_v10_database_settings_and_resources_survive(tmp_path):
         db.execute("DELETE FROM settings WHERE key=?", (key,))
     db.close()
     db = Database(path)
-    assert db.rows("PRAGMA user_version")[0]["user_version"] == 3
+    assert db.rows("PRAGMA user_version")[0]["user_version"] == 4
     assert db.setting("theme") == "light" and db.setting("history_limit") == 72
     assert not db.setting("reduced_motion") and db.setting("animation_fps") == 30
     assert db.rows("SELECT text FROM snippets")[0]["text"] == "keep me"
