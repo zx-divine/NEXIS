@@ -13,8 +13,8 @@ DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-; Qt 6.12 requires Windows 10 version 1809 or newer.
-MinVersion=10.0.17763
+; Supported NEXIS launch target: Windows 10 22H2 build 19045+, or Windows 11.
+MinVersion=10.0.19045
 OutputDir=..\dist\installer
 OutputBaseFilename=NEXIS-Desktop-{#AppVersion}-Setup
 SetupIconFile=..\assets\branding\NEXIS.ico

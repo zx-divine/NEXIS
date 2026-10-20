@@ -152,3 +152,12 @@ def test_installation_directory_keeps_fresh_review(tmp_path, monkeypatch, db, pl
     assert not platform.calls
     assert ToolExecutor(db, tmp_path, platform, lambda preview: True).run(step, Event())["request_accepted"]
     assert platform.calls[0][0] == "folder"
+
+
+def test_packaging_hook_uses_installed_vad_wheel_metadata():
+    import runpy
+    root = Path(__file__).resolve().parents[2]
+    hook = runpy.run_path(str(root / "scripts/pyinstaller_hooks/hook-webrtcvad.py"))
+    assert "_webrtcvad" in hook["hiddenimports"]
+    assert any("webrtcvad_wheels" in str(destination) and Path(source).exists()
+               for source, destination in hook["datas"])

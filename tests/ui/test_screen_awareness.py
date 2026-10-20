@@ -105,5 +105,6 @@ def test_natural_screen_request_opens_preview_page_without_capture_or_network(qt
     window.navigate("Chat")
     window.conversation_request("Explain this error on my screen", "chat")
     assert not calls and not page.image and not page.jobs and not window.ai_jobs
-    assert "Nothing has been captured" in window.conversation_history[-1]["content"]
+    assert not window.conversation_history
+    assert "Nothing has been captured" in window.chat.messages.item(window.chat.messages.count() - 1).text()
     window.close()

@@ -45,8 +45,9 @@ with tempfile.TemporaryDirectory(prefix="nexis-portable-", ignore_cleanup_errors
     )
     result = json.loads((output / "packaged-smoke.json").read_text(encoding="utf-8"))
     assert result["frozen"] and result["ok"] and result["app_user_model_id_matches"]
+    assert result["app_version"] == version and result["workflow_fixture_check"]["result"] == "PASS"
     assert result["wizard_completed"] and result["about_logo_loaded"]
-    assert result["schema_version"] == 3
+    assert result["schema_version"] == 4
     assert result["bundled_model"]["loaded"] and result["bundled_model"]["inside_package"]
     assert result["bundled_model"]["files_verified"] == 14
     assert all(value == "available" for value in result["voice_dependencies"].values())

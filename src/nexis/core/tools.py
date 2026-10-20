@@ -502,8 +502,17 @@ class ToolExecutor:
             self.clipboard(args["text"])
             return {"request_accepted": True}
         if name == "workflow_run":
-            result = self.engine.execute("run " + args["name"], cancel)
+            def deliver(index, step_result):
+                if cancel.is_set():
+                    raise ValueError("Workflow cancelled before result delivery.")
+                if step_result.ok and "clipboard" in step_result.data:
+                    require_access(self.db, "clipboard_access")
+                    if not self.clipboard:
+                        raise ValueError("Clipboard delivery is unavailable; the workflow did not complete.")
+                    self.clipboard(step_result.data["clipboard"])
+
+            result = self.engine.execute("run " + args["name"], cancel, on_step=deliver)
             if not result.ok:
                 raise ValueError(result.message)
-            return {"verified": True, "message": result.message}
+            return {"request_accepted": True, "message": result.message}
         raise ValueError("Unsupported tool.")

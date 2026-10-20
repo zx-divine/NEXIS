@@ -68,6 +68,8 @@ subprocess.run(
 )
 report = json.loads((output / "packaged-smoke.json").read_text(encoding="utf-8"))
 assert report["ok"] and report["frozen"] and report["stylesheet_loaded"]
+assert report["app_version"] == version
+assert report["workflow_fixture_check"]["result"] == "PASS"
 assert report["bundled_model"]["loaded"] and report["bundled_model"]["inside_package"]
 assert report["bundled_model"]["files_verified"] == 14
 assert report["bundled_model"]["narrowband_default_selected_rate"] == 16000
@@ -77,7 +79,7 @@ assert report["windows_plugin_present"]
 assert report["application_icon_loaded"] and report["window_icon_loaded"]
 assert report["about_logo_loaded"] and report["wizard_completed"]
 assert report["app_user_model_id_matches"]
-assert report["schema_version"] == 3
+assert report["schema_version"] == 4
 assert all(state == "available" for state in report["voice_dependencies"].values())
 assert (
     report["logo_sha256"]

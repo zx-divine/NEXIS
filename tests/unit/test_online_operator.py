@@ -71,6 +71,26 @@ def test_provider_prose_cannot_execute_commands():
         parse_plan({"text": '{"steps":[{"tool":"shell","arguments":{}}]}', "calls": []})
 
 
+def test_ai_saved_workflow_delivers_clipboard_steps_without_claiming_verified_os_effects(db, tmp_path, platform):
+    from nexis.storage.repository import Repository
+    Repository(db).save_snippet("approved", "Test", "Disposable approved text")
+    Repository(db).save_workflow("clip", ["copy approved"])
+    deliveries = []
+    executor = ToolExecutor(db, tmp_path, platform, lambda preview: True, deliveries.append)
+    result = executor.run(step("workflow_run", name="clip"), Event())
+    assert deliveries == ["Disposable approved text"]
+    assert result["request_accepted"] and not result.get("verified")
+
+
+def test_ai_saved_workflow_fails_if_clipboard_delivery_is_unavailable(db, tmp_path, platform):
+    from nexis.storage.repository import Repository
+    Repository(db).save_snippet("approved", "Test", "Disposable approved text")
+    Repository(db).save_workflow("clip", ["copy approved"])
+    executor = ToolExecutor(db, tmp_path, platform, lambda preview: True)
+    with pytest.raises(ValueError, match="Clipboard delivery is unavailable"):
+        executor.run(step("workflow_run", name="clip"), Event())
+
+
 def test_create_copy_move_rename_and_preview_are_real_disposable_operations(executor, db):
     root = Path(db.setting("search_roots")[0])
     file = root / "hello.txt"

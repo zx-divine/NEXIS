@@ -4,7 +4,7 @@ from pathlib import Path
 from PySide6.QtCore import QLockFile, QStandardPaths, QTimer, Qt
 from PySide6.QtWidgets import QApplication, QMessageBox
 
-from nexis import __version__
+from nexis import __version__, MIN_WINDOWS_BUILD
 from nexis.branding import application_icon, set_app_user_model_id
 from nexis.storage.database import Database, StorageError
 from nexis.ui.branding import WelcomeWizard, splash_screen
@@ -15,6 +15,9 @@ from nexis.utils.logging import configure
 def main():
     set_app_user_model_id()
     app = QApplication(sys.argv)
+    if sys.platform == "win32" and sys.getwindowsversion().build < MIN_WINDOWS_BUILD:
+        QMessageBox.critical(None, "Unsupported Windows version", "NEXIS requires Windows 10 build 19045 or newer, or Windows 11 (64-bit). This installation is not supported on the current Windows version.")
+        return 1
     app.setWindowIcon(application_icon())
     app.setApplicationName("NEXIS Desktop")
     app.setOrganizationName("NEXIS")

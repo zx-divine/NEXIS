@@ -1,4 +1,4 @@
-# NEXIS Desktop 1.3.2 — Crimson Command
+# NEXIS Desktop 1.3.3 — Crimson Command
 
 NEXIS combines online AI conversation, explicit microphone control and permission-controlled Windows tools in the existing Crimson Command HUD. This local build is under verification; it is not a qualified public release.
 
@@ -44,7 +44,7 @@ Ordinary websites open in the default browser. Advanced existing-tab focus/close
 
 **Screen Awareness** is also off by default. Grant its separate capability in Settings, enable the feature, click Capture preview, and inspect it before approving a request to the disclosed provider. Vision support depends on your configured model. No image is sent automatically, no tool executes from its explanation, and cancellation cannot recall an already-approved transmission. Adapter formats follow [Google's image-input documentation](https://ai.google.dev/gemini-api/docs/generate-content/image-understanding) and [OpenAI-compatible image messages](https://developers.openai.com/api/docs/guides/images-vision); no model name or free-tier availability is assumed.
 
-See **docs/INSTALLER_PERMISSION_OVERHAUL.md** for the current build inventory, actual tests and remaining manual checks. Machine-specific historical evidence remains local and is not part of this source repository.
+See **docs/GOD_MODE_HANDOFF.md** for the 1.3.3 checkpoint and **docs/INSTALLER_PERMISSION_OVERHAUL.md** for the installer and permission design. Machine-specific historical evidence remains local and is not part of this source repository.
 
 Real provider inference depends on a working owner-configured provider and remains separately qualified. Three standalone speech cycles and five complete source/restart/executable/installer/portable voice cycles remain **PENDING USER VERIFICATION**. Windows 11, clean machines without Python, physical audio/hot-plug behavior and live taskbar grouping have not been certified. Automated fixtures never count as those real speech cycles.
 
@@ -59,4 +59,7 @@ With the relevant capability enabled, explicit requests to open normal installed
 
 Use Python 3.12 x64 in an isolated environment, install requirements-dev.txt, and install this project with `pip install -e .`. Run `python scripts/build.py` to validate the official model, run tests/static checks and build the PyInstaller folder. The build explicitly prepares the approved 41.2 MB model if missing; no model is downloaded silently by the installed app. Direct spec builds require python scripts/prepare_model.py --download first. Model binaries are intentionally not stored in Git; the pinned manifest, official source URL and redistribution notices are included. Missing/altered model data stops the release build. Compile installer/NEXIS.iss with Inno Setup after building. Uploading an installer or publishing a Release remains a separate owner decision.
 
-Windows 10 version 1809 or newer (x64), or Windows 11, is required by this Qt runtime. Windows supplies SAPI voices, audio drivers and standard system fonts. The one-folder application bundles Python, Qt, native audio libraries and the default offline model. Always keep NEXIS.exe with its adjacent _internal folder.
+The supported NEXIS target is Windows 10 build 19045+ (x64), or Windows 11. Windows supplies SAPI voices, audio drivers and standard system fonts. The one-folder application bundles Python, Qt, native audio libraries and the default offline model. Always keep NEXIS.exe with its adjacent _internal folder.
+
+
+The local 1.3.3 candidate is `dist/NEXIS/NEXIS.exe`; its installer is `dist/installer/NEXIS-Desktop-1.3.3.0-Setup.exe`, and its portable archive is `dist/NEXIS-Desktop-1.3.3-Windows-x64-Portable.zip`. These are local verification candidates, not a published release. The previous 1.3.2 distribution is retained separately. Run `python scripts/verify_five_rounds.py` for five serial regression processes with fresh temporary test state and an unchanged-source fingerprint. Local evidence is excluded from source publication.

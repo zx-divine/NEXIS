@@ -15,6 +15,7 @@ from nexis.storage.database import Database
 from nexis.branding import APP_USER_MODEL_ID, asset
 from nexis.ui.branding import BrandLogo, WelcomeWizard, splash_screen
 from nexis.ui.main_window import MainWindow
+from nexis import __version__
 
 
 def smoke(app, output):
@@ -92,6 +93,7 @@ def smoke(app, output):
                             image.save(str(destination / ("native-window-icon-" + name + ".png")))
             report = {
                 "ok": True,
+                "app_version": __version__,
                 "frozen": bool(getattr(sys, "frozen", False)),
                 "python_network_blocked": "--offline-smoke" in sys.argv,
                 "network_connection_attempts": len(network_attempts),
@@ -148,6 +150,11 @@ def smoke(app, output):
                 report["bundled_model"] = {"loaded": False, "error_type": type(exc).__name__}
                 report["ok"] = False
             try:
+                report["workflow_fixture_check"] = workflow_fixture_check(temporary)
+            except Exception as exc:
+                report["workflow_fixture_check"] = {"result": "FAIL", "error_type": type(exc).__name__}
+                report["ok"] = False
+            try:
                 report["provider_adapter_checks"] = provider_sdk_fixture_check()
             except Exception as exc:
                 report["provider_adapter_checks"] = {
@@ -183,6 +190,28 @@ def smoke(app, output):
         status = app.exec()
         db.close()
         return status
+
+
+def workflow_fixture_check(temporary):
+    """Exercise the frozen workflow backend without touching Windows clipboard."""
+    from threading import Event
+    from nexis.storage.repository import Repository
+    from nexis.core.tools import ToolExecutor
+    database = Database(Path(temporary) / "workflow-fixture.db")
+    try:
+        database.set_setting("system_access_acknowledged", True)
+        database.set_setting("access_permissions", {"workflow_execution": True, "clipboard_access": True})
+        Repository(database).save_snippet("fixture", "Test", "Disposable package fixture")
+        Repository(database).save_workflow("fixture", ["copy fixture"])
+        deliveries = []
+        executor = ToolExecutor(database, temporary, object(), lambda preview: True, deliveries.append)
+        result = executor.run({"tool": "workflow_run", "arguments": {"name": "fixture"}}, Event())
+        if deliveries != ["Disposable package fixture"] or not result.get("request_accepted") or result.get("verified"):
+            raise ValueError("Packaged workflow failed its clipboard delivery boundary check.")
+        return {"result": "PASS", "backend_deliveries": 1, "real_clipboard_modified": False,
+                "os_effects_verified": False}
+    finally:
+        database.close()
 
 
 def provider_sdk_fixture_check():

@@ -19,6 +19,18 @@ def test_remember_drafts_until_explicit_save_and_forget_requires_selection(qtbot
     assert window.memories.list.count() == 1
     assert len(window.memories.store.search()) == 1  # No automatic deletion.
     assert not window.ai_jobs and not platform.calls
+    assert not window.conversation_history  # Local notes must not leak through later AI history.
+    window.close()
+
+
+def test_later_ai_request_never_receives_local_memory_command_text(qtbot, db, tmp_path, platform, monkeypatch):
+    seen = []
+    monkeypatch.setattr("nexis.ui.main_window.start_chat", lambda window, text, origin: seen.extend(window.conversation_history))
+    window = MainWindow(db, tmp_path, platform)
+    qtbot.addWidget(window)
+    window.conversation_request("Remember this: private approved project context", "chat")
+    window.conversation_request("Explain Python", "chat")
+    assert seen == [{"role": "user", "content": "Explain Python"}]
     window.close()
 
 

@@ -90,6 +90,7 @@ subprocess.run(
 )
 smoke = json.loads((output / "packaged-smoke.json").read_text(encoding="utf-8"))
 assert smoke["frozen"] and smoke["ok"] and smoke["app_user_model_id_matches"]
+assert smoke["app_version"] == version and smoke["workflow_fixture_check"]["result"] == "PASS"
 assert all(value == "available" for value in smoke["voice_dependencies"].values())
 assert smoke["bundled_model"]["loaded"] and smoke["bundled_model"]["inside_package"]
 assert smoke["bundled_model"]["files_verified"] == 14

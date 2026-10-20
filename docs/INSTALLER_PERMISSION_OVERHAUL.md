@@ -1,4 +1,6 @@
-# NEXIS 1.3.2 installer and permission overhaul
+# NEXIS installer and permission overhaul
+
+Historical 1.3.2 design/evidence below. For the final local 1.3.3 candidate and remaining gates, see [GOD_MODE_HANDOFF.md](GOD_MODE_HANDOFF.md), milestone F.
 
 Work continued on 19 October 2026. Local engineering build; real hardware and clean-machine qualification are still required.
 

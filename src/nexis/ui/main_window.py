@@ -572,20 +572,22 @@ class MainWindow(QMainWindow):
             return
         if origin == "chat":
             self.chat.pending_prompt = text
-        if not self.conversation_history or self.conversation_history[-1] != {
+        memory_request = re.fullmatch(r"(remember|forget) this(?::\s*|\s+)(.+)", text, re.IGNORECASE | re.DOTALL)
+        screen_request = text.strip().casefold().rstrip(".?!") in {"explain this error on my screen", "explain my screen", "analyze my screen"}
+        local_only = bool(memory_request or screen_request)
+        if not local_only and (not self.conversation_history or self.conversation_history[-1] != {
             "role": "user",
             "content": text[:1000],
-        }:
+        }):
             self.conversation_history.append({"role": "user", "content": text[:1000]})
         self.conversation_history = self.conversation_history[-24:]
         if origin == "voice":
             self.voice.thinking()
-        if text.strip().casefold().rstrip(".?!") in {"explain this error on my screen", "explain my screen", "analyze my screen"}:
+        if screen_request:
             self.screen_awareness.question.setText(text[:1000])
             self.navigate("Screen Awareness")
             self.local_page_reply("Screen Awareness is ready for your explicit action. Enable the feature and screen permission if needed, click Capture preview, inspect it, then separately approve the destination before sending. Nothing has been captured or transmitted.", origin)
             return
-        memory_request = re.fullmatch(r"(remember|forget) this(?::\s*|\s+)(.+)", text, re.IGNORECASE | re.DOTALL)
         if memory_request and memory_request[1].casefold() == "remember":
             self.memories.draft(memory_request[2].strip())
             self.navigate("Local Memory")
@@ -606,7 +608,8 @@ class MainWindow(QMainWindow):
     def local_page_reply(self, text, origin):
         # Navigating away cancels the voice generation. Do not start hidden speech
         # or a hands-free follow-up from a memory-management acknowledgement.
-        self.ai_reply(text, "chat")
+        # Local commands and acknowledgements never become later cloud history.
+        self.chat.add_message("NEXIS", text)
         if origin == "voice":
             self.voice.response.setPlainText(text)
             self.voice.change_state("IDLE")
