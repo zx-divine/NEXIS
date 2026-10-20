@@ -28,6 +28,10 @@ DEFAULTS = {
     "voice_hands_free": False,
     "workflow_drafting_enabled": False,
     "screen_awareness_enabled": False,
+    "floating_orb_enabled": False,
+    "orb_position": [],
+    "update_checks_enabled": False,
+    "update_last_check": "",
     "mic_sensitivity": 100,
     "mic_noise_floor": 0.001,
     "mic_calibration_device": "",
@@ -150,6 +154,8 @@ class Database:
                 return []
             if key == "access_permissions":
                 return {k: value.get(k) is True for k in CATEGORIES}
+            if key == "orb_position" and (len(value) not in (0, 2) or any(type(n) is not int or abs(n) > 100000 for n in value)):
+                return []
             if key == "browser_adapter_port" and value != 0 and not 1024 <= value <= 65535:
                 return 0
             if isinstance(value, (dict, list)):
@@ -175,6 +181,8 @@ class Database:
             raise ValueError(
                 "Use 0 to disable the browser adapter, or a loopback port from 1024 to 65535."
             )
+        if key == "orb_position" and (len(value) not in (0, 2) or any(type(n) is not int or abs(n) > 100000 for n in value)):
+            raise ValueError("Invalid saved orb position.")
         if key == "voice_model_path" and value:
             path = Path(value)
             if not path.is_absolute() or not path.is_dir():
@@ -232,6 +240,8 @@ class Database:
                 "app_catalog",
                 "app_preferences",
                 "tool_audit",
+                "local_memories",
+                "document_index",
             ):
                 self.connection.execute("DELETE FROM " + table)
             for key, value in DEFAULTS.items():

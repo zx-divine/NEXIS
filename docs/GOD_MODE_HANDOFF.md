@@ -23,8 +23,8 @@ Baseline source/remote: b2a0cac595c48ee3e448660db7c5f4d4d5b458c8. The fresh base
 | Natural-language automation | WORKING in automated tests | Experimental draft-only provider adapter, editable existing commands, no-effect dry-run, explicit save/run, bounded pause/cancel/revocation; live drafting remains unverified |
 | Hindi/Hinglish | NOT TESTED | Default model is English. Do not advertise multilingual STT without validated compatible packs/audio |
 | Screen Awareness | PARTIALLY WORKING | Explicit grant + opt-in + preview + destination consent; adapters tested with generated pixels/mock transports only. Real capture and live image inference not performed |
-| Floating orb / tray | MISSING | Reuse existing reactor; no microphone activation from visibility |
-| Update discovery | MISSING | Official-repository metadata only; no automatic installer execution |
+| Floating orb / tray | PARTIALLY WORKING | Optional/off by default; explicit Talk opens visible Voice Chat; drag/position/visibility policy tested. Physical multi-monitor/tray/fullscreen behavior pending |
+| Update discovery | WORKING within documented bounds | Official release metadata only; real no-release response verified; local SHA-256 comparison, no installer execution. No public release exists |
 
 ## Milestone A — Voice Core source checkpoint
 
@@ -87,6 +87,17 @@ Milestone C was pushed and verified at **429e7c94df9207e4671a116e02fb8709838dac2
 Review, meaningful targeted checks, source-only commit/push and an updated handoff are required after each milestone. Do not proceed past an unresolved code failure. Hardware checks can remain explicit external verification blockers while independent engineering continues.
 
 ## Mandatory outstanding verification
+
+### Milestone E — Desktop experience checkpoint
+
+Milestone D was pushed and verified at **3226ca827a08eee3f634830bcd0e49df21844235**.
+
+- Optional floating reactor/tray controls are OFF by default. Showing, dragging or restoring never starts recording. Explicit Talk restores visible Voice Chat and uses its existing gates. Logical positions are clamped to available monitors and react to display removal/scaling. Manual hide stops rendering and the eligibility timer. A lightweight two-second Windows eligibility check hides the orb during reported fullscreen/presentation/locked/quiet/unknown states. Collapse is disabled without a recoverable tray path. Shutdown closes the companion.
+- Update discovery uses only the official repository's latest stable-release API with no account/token, bounded data/time, cancellation and strict official URL validation. Optional daily startup checks are OFF by default and require the network capability. Download/page opening requires explicit review and browser/network grants. Local SHA-256 verification compares an explicitly selected file against supplied metadata; this does not independently authenticate a publisher. Installers are never executed.
+- Manual actions and AI execution are serialized so a second UI route cannot start overlapping OS actions. Reset now clears new memory/index tables and private UI drafts, disables experimental features and refreshes selected-provider state. Settings export explicitly excludes indexed contents and points to the separate memory export.
+- Measured and rejected a bitmap-ring rendering candidate: active paint 21.928 ms and excessive CPU. Retained cached vector paths preserving the reactor's geometry, colors, timing and audio semantics. Same-viewport current-host measurements: active paint **11.703 ms** versus baseline **14.002 ms**; idle **10.661 ms** versus **12.568 ms**. Total active process CPU stayed approximately unchanged (56.23% versus 55.79% of one core), so no total CPU improvement is claimed. Current UI-only working set about 107 MB; first window event 2.913 s versus earlier 1.495 s, under different host load. This is not low-end hardware certification. Reduced/minimized modes performed no reactor paints; minimized sensors stopped. Three isolated before/after images differed by at most 0.123 mean channel levels out of 255; the retained vector rendering was visually inspected.
+
+**Actual checks:** initial experience group 42 passed; privacy/integration review group 47 passed; complete source suite **381 passed, 1 skipped**, 125.96 seconds. Ruff passed. A real unauthenticated official-release request completed with no stable release/assets; downloads stayed disabled. The native Windows notification-eligibility API returned a busy state. Orb policy tests use injected eligibility and simulated geometry; physical tray/multi-monitor/fullscreen testing remains pending. Source A–E is not yet in the old 1.3.2 binaries. F packaging/five final regressions remain outstanding.
 
 Real normal-volume speech, representative “Hi NEXIS,” selected-provider inference, audible output, physical hot-plug, low-end hardware behavior and clean Windows 10 build 19045+/Windows 11 install/uninstall are **NOT VERIFIED**. The owner has been given one Voice Studio test instruction. Existing three standalone and five integrated real conversation cycles remain pending. No owner interaction has been simulated.
 

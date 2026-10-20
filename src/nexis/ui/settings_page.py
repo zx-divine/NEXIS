@@ -76,7 +76,7 @@ class SettingsPage(QWidget):
             lambda: window.navigate("Applications"),
             layout,
         )
-        button("Export all local data…", self.export, layout)
+        button("Export settings & saved resources…", self.export, layout)
         button("Delete all local data…", self.delete, layout)
         self.status = QLabel("")
         self.status.setWordWrap(True)
@@ -155,7 +155,7 @@ class SettingsPage(QWidget):
         )
         if path:
             self.management().export(path)
-            self.status.setText("Export saved. It contains personal data.")
+            self.status.setText("Export saved. It contains personal data. Memory has its own export; indexed document contents are excluded.")
 
     def delete(self):
         if any(
@@ -175,6 +175,27 @@ class SettingsPage(QWidget):
         self.provider.manager.legacy.delete()
         self.provider.current_id = None
         self.provider.reload_saved()
+        self.window.desktop_experience.enabled.setChecked(False)
+        self.window.desktop_experience.cleanup()
+        self.window.updates_page.automatic.setChecked(False)
+        self.window.workflow_studio.enabled.setChecked(False)
+        self.window.workflow_studio.steps.clear()
+        self.window.workflow_studio.prompt.clear()
+        self.window.workflow_studio.title.clear()
+        self.window.screen_awareness.enabled.setChecked(False)
+        self.window.screen_awareness.discard()
+        self.window.memories.new()
+        self.window.memories.query.clear()
+        self.window.memories.refresh()
+        self.window.files.results.clear()
+        self.window.files.result_metadata.clear()
+        self.window.files.metadata.clear()
+        self.window.chat.clear_conversation()
+        self.window.voice.transcript.clear()
+        self.window.voice.response.clear()
+        self.window.voice.pending_transcript = ""
+        self.window.voice.metrics = {}
+        self.window.refresh_provider_identity()
         # Close log handlers before removing local logs.
         import logging
 

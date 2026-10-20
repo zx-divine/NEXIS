@@ -47,6 +47,8 @@ from nexis.ui.memory_page import MemoryPage
 from nexis.ui.health_page import HealthPage
 from nexis.ui.workflow_studio import WorkflowStudio
 from nexis.ui.screen_page import ScreenPage
+from nexis.ui.desktop_page import DesktopPage
+from nexis.ui.updates_page import UpdatesPage
 
 
 class MainWindow(QMainWindow):
@@ -153,6 +155,10 @@ class MainWindow(QMainWindow):
         self.add_page("Screen Awareness", self.screen_awareness)
         self.settings_page = SettingsPage(self)
         self.add_page("Settings", self.settings_page)
+        self.desktop_experience = DesktopPage(self)
+        self.add_page("Desktop Companion", self.desktop_experience)
+        self.updates_page = UpdatesPage(self)
+        self.add_page("Updates", self.updates_page)
         about = QWidget()
         layout = QVBoxLayout(about)
         layout.addWidget(BrandLogo(128))
@@ -453,6 +459,8 @@ class MainWindow(QMainWindow):
             reactor.set_reduced_motion(reduced)
             reactor.set_fps(fps)
         self.deck.set_reduced_motion(reduced)
+        if hasattr(self, "desktop_experience"):
+            self.desktop_experience.apply_preferences()
         self.radar.reduced_motion = reduced
         self.radar.sync_timer()
         self.motion_label.setText(
@@ -671,6 +679,8 @@ class MainWindow(QMainWindow):
         self.voice.refresh_setup()
         self.settings_page.voice_setup.refresh_model()
         self.settings_page.voice_setup.start_speech()
+        self.desktop_experience.start_if_enabled()
+        self.updates_page.auto_check_if_due()
         if self.discovery.stale():
             self.discovery.scan()
         self.discovery_timer = QTimer(self)
@@ -692,6 +702,7 @@ class MainWindow(QMainWindow):
             *self.health.jobs,
             *self.workflow_studio.jobs,
             *self.screen_awareness.jobs,
+            *self.updates_page.jobs,
             self.voice.worker,
             *self.ai_jobs,
             *self.discovery.jobs,
@@ -719,6 +730,7 @@ class MainWindow(QMainWindow):
                     job.respond(False)
             self.workflow_studio.cancel()
             self.screen_awareness.discard()
+            self.updates_page.cancel()
             dialogs.reject_pending(self)
         self.db.set_setting("microphone_muted", bool(muted))
         self.update_mute_label()
@@ -728,6 +740,14 @@ class MainWindow(QMainWindow):
         )
 
     def submit(self, text=None, origin="manual"):
+        if any(job.isRunning() for job in self.ai_jobs):
+            message = "An AI request is still running. Cancel it or wait before starting a manual action; no command was executed."
+            self.output.appendPlainText(message)
+            if origin == "chat":
+                self.chat.add_message("NEXIS", message)
+            elif origin == "voice":
+                self.voice.response.setPlainText(message)
+            return
         if self.worker and self.worker.isRunning():
             message = "A command is still running. Stop it or wait for completion."
             self.output.appendPlainText(message)
@@ -939,4 +959,5 @@ class MainWindow(QMainWindow):
             self.discovery_timer.stop()
         self.settle_timer.stop()
         self.suspend_visuals(True)
+        self.desktop_experience.shutdown()
         event.accept()

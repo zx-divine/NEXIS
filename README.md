@@ -38,6 +38,8 @@ Ordinary websites open in the default browser. Advanced existing-tab focus/close
 
 ## Verification and current blockers
 
+**Desktop Companion** optionally enables the floating reactor and Windows tray controls. It is off by default, respects reduced motion and Windows' reported busy/fullscreen state, and never records merely by appearing. Talk opens visible Voice Chat. **Updates** checks only the official repository; optional automatic checks are daily and off by default. Downloads need explicit approval, and NEXIS never runs an installer. Compare a selected downloaded file's SHA-256 where metadata is supplied; this alone does not authenticate the publisher.
+
 **Workflows → Workflow Studio** optionally drafts a routine from your description. Review/edit the commands, use Dry-run validation, save, and use the existing Run control explicitly. Pause/resume/stop are in the Manual Command Deck; pause waits for the next step boundary. The experimental AI drafting flag is off by default.
 
 **Screen Awareness** is also off by default. Grant its separate capability in Settings, enable the feature, click Capture preview, and inspect it before approving a request to the disclosed provider. Vision support depends on your configured model. No image is sent automatically, no tool executes from its explanation, and cancellation cannot recall an already-approved transmission. Adapter formats follow [Google's image-input documentation](https://ai.google.dev/gemini-api/docs/generate-content/image-understanding) and [OpenAI-compatible image messages](https://developers.openai.com/api/docs/guides/images-vision); no model name or free-tier availability is assumed.

@@ -156,6 +156,14 @@ def test_data_reset_refreshes_new_catalog_and_voice_controls(
     db.execute("INSERT INTO app_catalog VALUES ('fixture','Fixture','unavailable','exe','test',0)")
     window.discovery.refresh()
     window.settings_page.voice_setup.tts_enabled.setChecked(False)
+    window.memories.store.save({"kind": "memory", "title": "Private fixture", "body": "Approved private fixture"})
+    window.memories.refresh()
+    window.memories.list.setCurrentRow(0)
+    db.execute("INSERT INTO document_index VALUES (?,?,?,?)", ("fixture.txt", 1, 123, "Private indexed fixture"))
+    window.updates_page.automatic.setChecked(True)
+    window.workflow_studio.enabled.setChecked(True)
+    window.workflow_studio.steps.setPlainText("open notepad")
+    window.voice.pending_transcript = "Private fixture transcript"
     assert window.discovery.list.count() == 1
     monkeypatch.setattr(
         window.settings_page, "management", lambda: SimpleNamespace(delete_all=db.reset)
@@ -163,6 +171,11 @@ def test_data_reset_refreshes_new_catalog_and_voice_controls(
     window.settings_page.delete()
     assert window.discovery.list.count() == 0
     assert window.settings_page.voice_setup.tts_enabled.isChecked()
+    assert not window.memories.body.toPlainText() and not window.memories.store.search()
+    assert not db.rows("SELECT * FROM document_index")
+    assert not window.updates_page.automatic.isChecked()
+    assert not window.workflow_studio.enabled.isChecked() and not window.workflow_studio.steps.toPlainText()
+    assert not window.voice.pending_transcript
 
 
 def test_first_run_save_updates_already_constructed_settings(qtbot, db, platform):

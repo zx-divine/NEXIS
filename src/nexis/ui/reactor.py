@@ -5,7 +5,7 @@ from enum import Enum
 from time import perf_counter
 
 from PySide6.QtCore import QPointF, QRectF, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPixmap, QRadialGradient, QPolygonF
+from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QPixmap, QRadialGradient, QPolygonF
 from PySide6.QtWidgets import QWidget
 
 RED = QColor("#FF2338")
@@ -50,6 +50,7 @@ class ReactorWidget(QWidget):
         self._cache = None
         self._cache_key = None
         self._core_cache = {}
+        self._motion_cache = None
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.advance)
         self.setMinimumSize(220, 220)
@@ -194,6 +195,32 @@ class ReactorWidget(QWidget):
             self._core_cache[key] = texture
         return self._core_cache[key]
 
+    def motion_geometry(self, size):
+        """Cache vector paths, retaining resolution-independent original artwork."""
+        if self._motion_cache is not None:
+            return self._motion_cache
+
+        def arcs(radius, starts, span):
+            path = QPainterPath()
+            rect = QRectF(-radius, -radius, radius * 2, radius * 2)
+            for start in starts:
+                path.arcMoveTo(rect, start)
+                path.arcTo(rect, start, span)
+            return path
+
+        paths = [arcs(281, (i * 7.5 for i in range(48)), 4.7),
+                 arcs(247, (i * 30 for i in range(12) if i % 3 == 0), 19),
+                 arcs(247, (i * 30 for i in range(12) if i % 3), 19),
+                 arcs(222, (i * 45 for i in range(8)), 17),
+                 arcs(172, (i * 60 for i in range(6)), 20)]
+        spokes = QPainterPath()
+        for i in range(16):
+            a = math.radians(i * 22.5)
+            spokes.moveTo(132 * math.cos(a), 132 * math.sin(a))
+            spokes.lineTo(158 * math.cos(a), 158 * math.sin(a))
+        self._motion_cache = [*paths, spokes]
+        return self._motion_cache
+
     def paintEvent(self, event):
         started = perf_counter()
         p = QPainter(self)
@@ -213,24 +240,27 @@ class ReactorWidget(QWidget):
         if self.reduced_motion:
             pulse = 0.5
         accent = GOLD if self.state in (ReactorState.PROCESSING, ReactorState.SUCCESS) else RED
-        for i in range(48):
-            self.ring(p, 281, i * 7.5 + phase, 4.7, QColor("#8B0000"), 6)
-        for i in range(12):
-            self.ring(p, 247, i * 30 - phase * 1.5, 19, RED if i % 3 == 0 else QColor("#8B0000"), 2)
         gold_phase = math.floor(phase / 12) * 4
-        for i in range(8):
-            self.ring(p, 222, i * 45 + gold_phase, 17, GOLD, 2)
+        layers = self.motion_geometry(side)
+        for index, (rotation, color, width) in enumerate((
+                (-phase, QColor("#8B0000"), 6), (phase * 1.5, RED, 2),
+                (phase * 1.5, QColor("#8B0000"), 2), (-gold_phase, GOLD, 2),
+                (phase, QColor("#8B0000"), 2))):
+            p.save()
+            p.rotate(rotation)
+            p.setPen(QPen(color, width))
+            p.setBrush(Qt.NoBrush)
+            p.drawPath(layers[index])
+            p.restore()
         for i in range(6):
             self.ring(p, 184, i * 60 + phase * 2.4, 38, accent, 5 + pulse * 2)
-            self.ring(p, 172, i * 60 - phase, 20, QColor("#8B0000"), 2)
         self.ring(p, 255, -phase * 2, 22, GOLD if self.state == ReactorState.SUCCESS else RED, 3)
-        for i in range(16):
-            a = math.radians(i * 22.5 + phase * 0.3)
-            p.setPen(QPen(QColor("#C8102E"), 1))
-            p.drawLine(
-                QPointF(132 * math.cos(a), 132 * math.sin(a)),
-                QPointF(158 * math.cos(a), 158 * math.sin(a)),
-            )
+        p.save()
+        p.rotate(phase * 0.3)
+        p.setPen(QPen(QColor("#C8102E"), 1))
+        p.setBrush(Qt.NoBrush)
+        p.drawPath(layers[5])
+        p.restore()
         p.setPen(QPen(accent, 1.5))
         p.setBrush(QColor("#120607"))
         p.drawEllipse(QPointF(0, 0), 125, 125)

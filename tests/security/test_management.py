@@ -33,6 +33,9 @@ def test_management_approved_operations(db, platform, tmp_path):
     manager.approve_folder(root)
     assert db.setting("search_roots") == [str(root.resolve())]
     Repository(db).save_snippet("private", "General", "private text")
+    from nexis.storage.memory import LocalMemory
+    LocalMemory(db).save({"kind": "project", "title": "Local test", "body": "Approved context"})
+    db.execute("INSERT INTO document_index VALUES (?,?,?,?)", ("fixture.txt", 7, 123, "Private indexed fixture"))
     path = tmp_path / "export.json"
     manager.export(path)
     assert json.loads(path.read_text())["snippets"][0]["text"] == "private text"
@@ -41,3 +44,5 @@ def test_management_approved_operations(db, platform, tmp_path):
     manager.delete_all()
     assert not platform.startup
     assert not db.rows("SELECT * FROM snippets")
+    assert not db.rows("SELECT * FROM local_memories")
+    assert not db.rows("SELECT * FROM document_index")

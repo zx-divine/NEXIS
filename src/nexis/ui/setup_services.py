@@ -400,9 +400,9 @@ def start_chat(window, text, origin):
     import os
     from nexis.core.operator import OperatorWorker
 
-    if any(job.isRunning() for job in window.ai_jobs):
+    if any(job.isRunning() for job in window.ai_jobs) or (window.worker and window.worker.isRunning()):
         window.ai_error(
-            "A provider request is already running. Wait or cancel it; your prompt is retained.",
+            "An AI request or manual action is already running. Wait or cancel it; your prompt is retained.",
             origin,
         )
         return
