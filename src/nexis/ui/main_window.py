@@ -80,6 +80,10 @@ class MainWindow(QMainWindow):
             "ONLINE AI   /   YOUR SELECTED PROVIDER   /   PERMISSIONS ENFORCED"
         )
         nav.addWidget(self.nav_hint)
+        self.mute_button = button("Hard mute / sleep", self.toggle_microphone_mute, nav)
+        self.mute_button.setAccessibleName("Hard mute or wake microphone; Ctrl Shift M")
+        self.mute_button.setToolTip("Stops this application's microphone, speech and queued actions. Wake enables Talk but never records automatically.")
+        self.update_mute_label()
         button("Full screen · F11", self.toggle_fullscreen, nav)
         root.addLayout(nav)
         self.stack = QStackedWidget()
@@ -169,6 +173,7 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence("Ctrl+3"), self, activated=lambda: self.navigate("Voice Chat"))
         QShortcut(QKeySequence("F11"), self, activated=self.toggle_fullscreen)
         QShortcut(QKeySequence("Escape"), self, activated=self.escape_action)
+        QShortcut(QKeySequence("Ctrl+Shift+M"), self, activated=self.toggle_microphone_mute)
 
     @staticmethod
     def small_label(text):
@@ -337,6 +342,10 @@ class MainWindow(QMainWindow):
     def navigate(self, label):
         if label not in self.pages:
             return
+        if label != "Settings" and hasattr(self, "settings_page"):
+            microphone = self.settings_page.voice_setup.microphone
+            if microphone.worker and microphone.worker.isRunning():
+                microphone.stop()
         # Leaving voice always requests capture stop; it never continues invisibly.
         if (
             hasattr(self, "voice")
@@ -479,6 +488,10 @@ class MainWindow(QMainWindow):
 
     def hideEvent(self, event):
         self.suspend_visuals(True)
+        if hasattr(self, "settings_page"):
+            self.settings_page.voice_setup.microphone.stop()
+        if hasattr(self, "voice"):
+            self.voice.stop()
         super().hideEvent(event)
 
     def changeEvent(self, event):
@@ -486,6 +499,7 @@ class MainWindow(QMainWindow):
         if event.type() == QEvent.WindowStateChange:
             if self.isMinimized() and hasattr(self, "voice"):
                 self.voice.stop()
+                self.settings_page.voice_setup.microphone.stop()
             self.suspend_visuals(self.isMinimized())
 
     def set_state(self, state):
@@ -610,7 +624,32 @@ class MainWindow(QMainWindow):
             *setup.provider.jobs,
             *setup.voice_setup.jobs,
             setup.voice_setup.speech,
+            setup.voice_setup.microphone.worker,
         ]
+
+    def update_mute_label(self):
+        self.mute_button.setText("Wake / enable microphone" if self.db.setting("microphone_muted") else "Hard mute / sleep")
+
+    def toggle_microphone_mute(self):
+        self.set_microphone_muted(not self.db.setting("microphone_muted"))
+
+    def set_microphone_muted(self, muted):
+        # Cancel first: persisting a preference must not delay a capture-stop request.
+        if muted:
+            self.voice.stop()
+            self.settings_page.voice_setup.microphone.stop()
+            self.stop_command()
+            for job in self.ai_jobs:
+                job.cancel.set()
+                if hasattr(job, "respond"):
+                    job.respond(False)
+            dialogs.reject_pending(self)
+        self.db.set_setting("microphone_muted", bool(muted))
+        self.update_mute_label()
+        self.voice.status.setText(
+            "Hard mute / sleep: capture and speech stopped; queued actions cancelled. Wake requires an explicit click."
+            if muted else "Awake. Microphone remains OFF until you press Talk or start an explicit Settings test."
+        )
 
     def submit(self, text=None, origin="manual"):
         if self.worker and self.worker.isRunning():
@@ -670,11 +709,20 @@ class MainWindow(QMainWindow):
 
     def permission(self, preview):
         self.permission_status.setText("PERMISSIONS / AWAITING REVIEW")
-        allowed = dialogs.confirm(self, preview)
+        worker = self.worker
+        if not worker or worker.cancel.is_set():
+            if worker:
+                worker.respond(False)
+            return
+        self._approval_cancel = worker.cancel
+        try:
+            allowed = dialogs.confirm(self, preview)
+        finally:
+            self._approval_cancel = None
         self.permission_status.setText(
             "PERMISSIONS / APPROVED" if allowed else "PERMISSIONS / DENIED"
         )
-        self.worker.respond(allowed)
+        worker.respond(allowed and not worker.cancel.is_set())
 
     def apply_payload(self, result):
         if result.ok and "clipboard" in result.data:

@@ -10,7 +10,8 @@ from nexis.core.voice import VoiceWorker
 
 def test_capture_lifecycle_levels_and_transcript(qtbot, monkeypatch, tmp_path):
     worker = VoiceWorker(str(tmp_path))
-    calls, statuses, levels = [], [], []
+    calls, statuses, levels, measurements = [], [], [], []
+    worker.measured.connect(measurements.append)
 
     class Recognizer:
         def __init__(self, model, rate):
@@ -64,6 +65,7 @@ def test_capture_lifecycle_levels_and_transcript(qtbot, monkeypatch, tmp_path):
     assert calls == ["open", "close"]
     assert any(text.startswith("LISTENING") for text in statuses)
     assert 0.5 in levels
+    assert measurements[0]["raw_transcript"] == ""  # Metrics must not persist ordinary private speech.
 
 
 def test_cancel_during_model_loading_never_opens_microphone(qtbot, monkeypatch, tmp_path):

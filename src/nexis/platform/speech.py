@@ -24,12 +24,14 @@ def default_input(sd, preference=""):
 class SpeechService(QThread):
     status = Signal(str)
     voices = Signal(object)
+    outputs = Signal(object)
     playback_started = Signal(str)
     playback_finished = Signal(str, str)
 
-    def __init__(self, preference=""):
+    def __init__(self, preference="", output_preference=""):
         super().__init__()
         self.preference = preference
+        self.output_preference = output_preference
         self.cancel = Event()
         self.queue = Queue(maxsize=8)
         self.purge = Event()
@@ -64,6 +66,28 @@ class SpeechService(QThread):
         if not self.queue.full():
             self.queue.put(("select", value))
 
+    def select_output(self, value):
+        # COM tokens are resolved only in the owning speech thread, on the next utterance.
+        self.output_preference = value
+
+    def bind_output(self, speaker):
+        enumerate_outputs = getattr(speaker, "GetAudioOutputs", None)
+        if not enumerate_outputs:
+            self.outputs.emit([])
+            return
+        try:
+            tokens = enumerate_outputs()
+            available = {tokens.Item(i).Id: tokens.Item(i) for i in range(tokens.Count)}
+        except Exception:
+            self.outputs.emit([])
+            self.status.emit("Speaker enumeration is unavailable; trying the Windows default output.")
+            return
+        self.outputs.emit([(key, token.GetDescription()) for key, token in available.items()])
+        if self.output_preference in available:
+            speaker.AudioOutput = available[self.output_preference]
+        elif self.output_preference:
+            self.status.emit("Saved speaker is unavailable; using the current Windows default output. Your preference is retained for reconnection.")
+
     def run(self):
         initialized = False
         try:
@@ -73,6 +97,7 @@ class SpeechService(QThread):
             pythoncom.CoInitialize()
             initialized = True
             speaker = win32com.client.Dispatch("SAPI.SpVoice")
+            self.bind_output(speaker)
             tokens = speaker.GetVoices()
             available = {tokens.Item(i).Id: tokens.Item(i) for i in range(tokens.Count)}
             if not available:
@@ -80,7 +105,7 @@ class SpeechService(QThread):
             self.voices.emit([(key, token.GetDescription()) for key, token in available.items()])
             if self.preference in available:
                 speaker.Voice = available[self.preference]
-            self.status.emit("Windows speech ready — using the default Windows audio output.")
+            self.status.emit("Windows speech ready. Output follows your speaker preference; missing speakers fall back to Windows default.")
             while not self.cancel.is_set():
                 pythoncom.PumpWaitingMessages()
                 try:
@@ -104,6 +129,7 @@ class SpeechService(QThread):
                         speaker.Speak("", 3 | 16)
                         # A fresh default-output binding follows Windows speaker changes.
                         speaker = win32com.client.Dispatch("SAPI.SpVoice")
+                        self.bind_output(speaker)
                         refreshed = speaker.GetVoices()
                         for index in range(refreshed.Count):
                             token = refreshed.Item(index)

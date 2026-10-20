@@ -7,10 +7,19 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QVBoxLayout,
 )
+from PySide6.QtCore import QTimer
+from PySide6.QtGui import QKeySequence, QShortcut
+
+
+def reject_pending(parent):
+    for dialog in parent.findChildren(QDialog):
+        if dialog.property("nexis_permission"):
+            dialog.reject()
 
 
 def confirm(parent, preview):
     dialog = QDialog(parent)
+    dialog.setProperty("nexis_permission", True)
     dialog.setWindowTitle("Permission preview")
     dialog.setMinimumWidth(480)
     layout = QVBoxLayout(dialog)
@@ -31,7 +40,19 @@ def confirm(parent, preview):
     buttons.accepted.connect(dialog.accept)
     buttons.rejected.connect(dialog.reject)
     layout.addWidget(buttons)
-    return dialog.exec() == QDialog.Accepted
+    cancel = getattr(parent, "_approval_cancel", None)
+    timer = QTimer(dialog)
+    timer.setInterval(80)
+    timer.timeout.connect(lambda: dialog.reject() if getattr(parent, "closing", False) or (cancel is not None and cancel.is_set()) else None)
+    timer.start()
+    if hasattr(parent, "set_microphone_muted"):
+        QShortcut(QKeySequence("Ctrl+Shift+M"), dialog, activated=lambda: parent.set_microphone_muted(True))
+    try:
+        accepted = dialog.exec() == QDialog.Accepted
+        return accepted and not (cancel is not None and cancel.is_set()) and not getattr(parent, "closing", False)
+    finally:
+        timer.stop()
+        dialog.deleteLater()
 
 
 def edit(parent, title, fields, multiline=()):

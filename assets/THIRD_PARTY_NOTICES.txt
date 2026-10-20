@@ -13,4 +13,7 @@ included beside the runtime. See the respective package metadata/license files.
 Windows SAPI voices, Windows audio drivers and system fonts are Windows components.
 NEXIS does not copy private voices, drivers or Windows installations into its package.
 No paid/cloud speech service or always-on wake-word engine is required.
+Voice activity detection: webrtcvad-wheels 2.0.14 (py-webrtcvad MIT and
+WebRTC BSD license notices retained in package metadata).
+https://github.com/wiseman/py-webrtcvad
 This notice is an inventory, not a replacement for component license terms.

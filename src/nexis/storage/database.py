@@ -1,4 +1,5 @@
 import json
+import math
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,8 +21,16 @@ DEFAULTS = {
     "voice_model_path": "",
     "catalog_scanned_at": "",
     "tts_voice": "",
+    "tts_output": "",
     "tts_enabled": True,
     "audio_input": "",
+    "microphone_muted": False,
+    "voice_hands_free": False,
+    "mic_sensitivity": 100,
+    "mic_noise_floor": 0.001,
+    "mic_calibration_device": "",
+    "mic_end_silence_ms": 1400,
+    "mic_normalize": True,
     "system_access_acknowledged": False,
     "access_permissions": DEFAULT_GRANTS,
     "browser_adapter_port": 0,
@@ -115,6 +124,12 @@ class Database:
             if key == "history_limit" and not 1 <= value <= 10000:
                 return default
             if key == "animation_fps" and not 10 <= value <= 30:
+                return default
+            if key == "mic_sensitivity" and not 50 <= value <= 200:
+                return default
+            if key == "mic_end_silence_ms" and not 700 <= value <= 3000:
+                return default
+            if key == "mic_noise_floor" and (not math.isfinite(value) or not 0.00001 <= value <= 0.25):
                 return default
             if key == "theme" and value not in ("dark", "light"):
                 return default

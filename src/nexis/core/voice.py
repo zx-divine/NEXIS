@@ -1,8 +1,8 @@
 """Optional local recognition. No model downloads, retained recordings or ambient capture."""
 
 from array import array
+from dataclasses import replace
 import importlib.util
-import json
 import math
 from pathlib import Path
 from queue import Empty, Full, Queue
@@ -12,10 +12,13 @@ from time import monotonic
 from PySide6.QtCore import QThread, Signal
 from nexis.platform.speech import default_input
 from nexis.core.models import valid_model
+from nexis.core.audio import AudioConditioner, InputOptions, calibration_floor
+from nexis.core.recognition import TranscriptDecoder
 
 _model_lock = Lock()
 _cached_model = None
 _cached_path = ""
+_capture_lock = Lock()
 
 
 def speech_model(path, factory):
@@ -37,7 +40,7 @@ def audio_level(data: bytes) -> float:
 
 
 def setup_status(model_path: str) -> tuple[bool, str]:
-    missing = [name for name in ("vosk", "sounddevice") if importlib.util.find_spec(name) is None]
+    missing = [name for name in ("vosk", "sounddevice", "webrtcvad", "_webrtcvad") if importlib.util.find_spec(name) is None]
     if missing:
         return (
             False,
@@ -89,11 +92,15 @@ class VoiceWorker(QThread):
     partial = Signal(str)
     failed = Signal(str)
     measured = Signal(object)
+    input_metrics = Signal(object)
+    calibrated = Signal(float)
 
-    def __init__(self, model_path, input_preference=""):
+    def __init__(self, model_path, input_preference="", options=None, calibrate=False):
         super().__init__()
         self.model_path = model_path
         self.input_preference = input_preference
+        self.options = options or InputOptions()
+        self.calibrate = calibrate
         self.cancel = Event()
         self.finish_capture = Event()
 
@@ -102,18 +109,29 @@ class VoiceWorker(QThread):
         self.finish_capture.set()
 
     def run(self):
+        owns_capture = False
         try:
             if self.cancel.is_set():
                 return
+            owns_capture = _capture_lock.acquire(blocking=False)
+            if not owns_capture:
+                raise ValueError("Another microphone session is still stopping or active. Retry after it releases the input.")
             import sounddevice as sd
-            from vosk import KaldiRecognizer, Model, SetLogLevel
+            if not self.calibrate:
+                from vosk import KaldiRecognizer, Model, SetLogLevel
 
-            SetLogLevel(-1)
-            self.status.emit("Loading local speech model…")
-            model = speech_model(self.model_path, Model)
+                SetLogLevel(-1)
+                self.status.emit("Loading local speech model…")
+                model = speech_model(self.model_path, Model)
+            else:
+                self.status.emit("Preparing quiet-room calibration; microphone not active yet")
             if self.cancel.is_set():
                 return
             device, info = default_input(sd, self.input_preference)
+            self.device_name = info.get("name", "Windows default microphone")
+            options = self.options
+            if options.calibration_device and options.calibration_device != self.device_name:
+                options = replace(options, noise_floor=0.001, calibration_device="")
             rate = int(info["default_samplerate"])
             if not 8000 <= rate <= 192000:
                 raise ValueError("Unsupported microphone sample rate.")
@@ -133,12 +151,17 @@ class VoiceWorker(QThread):
                     )
             elif rate not in candidates:
                 raise ValueError("Microphone sample rate is incompatible with this speech model. Select another input or a wideband headset mode.")
-            recognizer = KaldiRecognizer(model, rate)
+            decoder = TranscriptDecoder(model, KaldiRecognizer, rate) if not self.calibrate else None
+            conditioner = AudioConditioner(rate, options)
+            noise_levels = []
             chunks = Queue(maxsize=20)
             overflow = Event()
 
             def capture(data, frames, timing, status):
                 if self.cancel.is_set():
+                    abort = getattr(sd, "CallbackAbort", None)
+                    if abort:
+                        raise abort
                     return
                 if status:
                     overflow.set()
@@ -147,9 +170,10 @@ class VoiceWorker(QThread):
                 except Full:
                     overflow.set()
 
-            parts = []
             samples = 0
             peak_level = 0.0
+            clipping_frames = 0
+            peak_gain = 1.0
             if self.cancel.is_set():
                 return
             if self.finish_capture.is_set():
@@ -164,10 +188,10 @@ class VoiceWorker(QThread):
                 channels=1,
                 callback=capture,
             ):
-                self.status.emit("LISTENING — microphone active")
+                self.status.emit("LISTENING — microphone active" + ("; stay quiet for two-second calibration" if self.calibrate else ""))
                 started = monotonic()
                 last_chunk = started
-                while not self.cancel.is_set() and monotonic() - started < 30:
+                while not self.cancel.is_set() and monotonic() - started < (2 if self.calibrate else 30):
                     if self.finish_capture.is_set():
                         break
                     if overflow.is_set():
@@ -183,33 +207,40 @@ class VoiceWorker(QThread):
                             )
                         continue
                     last_chunk = monotonic()
-                    level = audio_level(data)
+                    processed, metrics = conditioner.process(data)
+                    level = metrics["rms"]
+                    self.input_metrics.emit(metrics)
+                    clipping_frames += int(metrics["clipping"])
+                    peak_gain = max(peak_gain, metrics["gain"])
                     samples += len(data) // 2
                     peak_level = max(peak_level, level)
                     self.level.emit(level)
-                    if recognizer.AcceptWaveform(data):
-                        text = json.loads(recognizer.Result()).get("text", "")
-                        if text:
-                            parts.append(text)
-                            break  # Recognizer endpoint: one conversation turn per explicit action.
-                    else:
-                        self.partial.emit(json.loads(recognizer.PartialResult()).get("partial", ""))
+                    if self.calibrate:
+                        noise_levels.append(level)
+                        if samples >= 2 * rate:
+                            break
+                        continue
+                    self.partial.emit(decoder.accept(processed))
+                    if conditioner.endpoint and decoder.parts:
+                        break
             if self.cancel.is_set():
                 self.status.emit("CANCELLED — microphone released; pending transcript discarded.")
                 return
             self.status.emit("TRANSCRIBING — microphone off")
+            if self.calibrate:
+                self.calibrated.emit(calibration_floor(noise_levels))
+                return
             # Closing the stream freezes this bounded queue before final recognition.
             while not chunks.empty():
                 data = chunks.get_nowait()
                 samples += len(data) // 2
                 peak_level = max(peak_level, audio_level(data))
-                if recognizer.AcceptWaveform(data):
-                    text = json.loads(recognizer.Result()).get("text", "")
-                    if text:
-                        parts.append(text)
-            text = json.loads(recognizer.FinalResult()).get("text", "")
-            if text:
-                parts.append(text)
+                processed, metrics = conditioner.process(data)
+                clipping_frames += int(metrics["clipping"])
+                peak_gain = max(peak_gain, metrics["gain"])
+                decoder.accept(processed)
+            text = decoder.finish()
+            raw_text = decoder.raw
             if not self.cancel.is_set():
                 self.measured.emit(
                     {
@@ -220,15 +251,22 @@ class VoiceWorker(QThread):
                         "device": info.get("name", "Windows default microphone"),
                         "pcm": "mono signed 16-bit",
                         "stream_closed": True,
+                        # Only a short adapted greeting belongs in measurement metadata.
+                        # Standalone QA persists metrics; ordinary private speech must not leak there.
+                        "raw_transcript": raw_text if text != raw_text else "",
+                        "greeting_adapted": text != raw_text,
+                        "max_gain": round(peak_gain, 3),
+                        "clipping_frames": clipping_frames,
+                        "noise_floor": round(conditioner.noise, 6),
                     }
                 )
-                self.transcript.emit(" ".join(parts))
+                self.transcript.emit(text)
         except Exception as exc:
             import logging
 
             logging.getLogger("nexis").warning("Voice unavailable (%s)", type(exc).__name__)
             if not self.cancel.is_set():
-                if isinstance(exc, ValueError) and "sample rate" in str(exc):
+                if isinstance(exc, ValueError) and any(word in str(exc) for word in ("sample rate", "microphone session", "Calibration", "calibration", "Room is too loud")):
                     message = str(exc)
                 else:
                     message = (
@@ -239,3 +277,5 @@ class VoiceWorker(QThread):
                 self.failed.emit(message)
         finally:
             self.level.emit(0.0)
+            if owns_capture:
+                _capture_lock.release()

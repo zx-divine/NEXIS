@@ -189,7 +189,7 @@ class DiscoveryPanel(QGroupBox):
 
 class VoiceSetupPanel(QGroupBox):
     def __init__(self, window):
-        super().__init__("Automatic offline voice and Windows speech")
+        super().__init__("Voice Studio — offline speech and Windows audio")
         self.window, self.jobs = window, []
         self.speech = None
         layout = QVBoxLayout(self)
@@ -208,6 +208,11 @@ class VoiceSetupPanel(QGroupBox):
         self.voices.addItem("Windows default voice", "")
         self.voices.currentIndexChanged.connect(self.select_voice)
         layout.addWidget(self.voices)
+        self.outputs = QComboBox()
+        self.outputs.setAccessibleName("Windows SAPI speaker output; next utterance")
+        self.outputs.addItem("Windows default speaker (recommended)", "")
+        self.outputs.currentIndexChanged.connect(self.select_output)
+        layout.addWidget(self.outputs)
         self.tts_enabled = QCheckBox("Read voice-chat replies aloud")
         self.tts_enabled.setChecked(window.db.setting("tts_enabled"))
         self.tts_enabled.toggled.connect(self.save_tts)
@@ -227,6 +232,10 @@ class VoiceSetupPanel(QGroupBox):
         )
         self.device_status.setWordWrap(True)
         layout.addWidget(self.device_status)
+        from nexis.ui.microphone import MicrophonePanel
+
+        self.microphone = MicrophonePanel(window)
+        layout.addWidget(self.microphone)
 
     def refresh_model(self):
         path = detect_model(self.window.db.setting("voice_model_path"), self.window.data_dir)
@@ -289,9 +298,10 @@ class VoiceSetupPanel(QGroupBox):
     def start_speech(self):
         if self.speech and self.speech.isRunning():
             return
-        self.speech = SpeechService(self.window.db.setting("tts_voice"))
+        self.speech = SpeechService(self.window.db.setting("tts_voice"), self.window.db.setting("tts_output"))
         self.speech.status.connect(self.device_status.setText)
         self.speech.voices.connect(self.voices_loaded)
+        self.speech.outputs.connect(self.outputs_loaded)
         self.window.voice.attach_speech(self.speech)
         self.speech.start()
 
@@ -305,6 +315,22 @@ class VoiceSetupPanel(QGroupBox):
         self.voices.setCurrentIndex(max(index, 0))
         self.voices.blockSignals(False)
 
+    def outputs_loaded(self, entries):
+        self.outputs.blockSignals(True)
+        self.outputs.clear()
+        self.outputs.addItem("Windows default speaker (recommended)", "")
+        for key, label in entries:
+            self.outputs.addItem(label, key)
+        self.outputs.setCurrentIndex(max(0, self.outputs.findData(self.window.db.setting("tts_output"))))
+        self.outputs.blockSignals(False)
+
+    @safe_ui
+    def select_output(self, index=None):
+        value = self.outputs.currentData() or ""
+        self.window.db.set_setting("tts_output", value)
+        if self.speech:
+            self.speech.select_output(value)
+
     @safe_ui
     def select_voice(self, index=None):
         value = self.voices.currentData() or ""
@@ -317,6 +343,12 @@ class VoiceSetupPanel(QGroupBox):
         self.window.db.set_setting("tts_enabled", enabled)
 
     def test_voice(self):
+        if self.window.db.setting("microphone_muted"):
+            self.device_status.setText("Hard mute is on. Wake first to test speech output.")
+            return
+        if any(w and w.isRunning() for w in (self.window.voice.worker, self.microphone.worker)):
+            self.device_status.setText("Stop microphone capture before testing the speaker to avoid feedback.")
+            return
         if not self.speech or not self.speech.isRunning():
             self.start_speech()
             self.device_status.setText("Initializing Windows speech; select Test again when ready.")
@@ -392,7 +424,11 @@ def start_chat(window, text, origin):
 
     def confirm(preview):
         window.permission_status.setText("PERMISSIONS / AWAITING REVIEW")
-        allowed = dialogs.confirm(window, preview) if active() else False
+        window._approval_cancel = job.cancel
+        try:
+            allowed = dialogs.confirm(window, preview) if active() else False
+        finally:
+            window._approval_cancel = None
         window.permission_status.setText(
             "PERMISSIONS / APPROVED" if allowed else "PERMISSIONS / DENIED"
         )

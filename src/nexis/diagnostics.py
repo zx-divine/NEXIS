@@ -129,6 +129,8 @@ def smoke(app, output):
             for dependency in (
                 "vosk",
                 "sounddevice",
+                "webrtcvad",
+                "_webrtcvad",
                 "win32crypt",
                 "pythoncom",
                 "google.genai",

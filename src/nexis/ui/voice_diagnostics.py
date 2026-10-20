@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 from nexis.branding import application_icon, set_app_user_model_id
 from nexis.core.models import MODEL, valid_model
 from nexis.core.voice import VoiceWorker
+from nexis.core.audio import level_percent
 from nexis.core.privacy import sanitize_request
 from nexis.platform.discovery import known_folder
 from nexis.platform.speech import SpeechService
@@ -260,7 +261,7 @@ class VoiceDiagnostics(QMainWindow):
         self.recording_requested = True
         self.worker = VoiceWorker(str(model), self.devices.currentData())
         self.worker.status.connect(self.capture_status)
-        self.worker.level.connect(lambda value: self.level.setValue(min(100, int(value * 500))))
+        self.worker.level.connect(lambda value: self.level.setValue(level_percent(value)))
         self.worker.transcript.connect(self.recognized)
         self.worker.measured.connect(self.measured)
         self.worker.failed.connect(self.capture_failure)

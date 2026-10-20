@@ -6,3 +6,4 @@ pywin32>=311,<313; sys_platform == "win32"
 google-genai==2.31.0
 Send2Trash==2.1.0
 websocket-client==1.9.0
+webrtcvad-wheels==2.0.14

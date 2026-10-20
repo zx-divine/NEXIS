@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QLabel,
+    QCheckBox,
     QLineEdit,
     QListWidget,
     QPlainTextEdit,
@@ -19,6 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from nexis.core.voice import VoiceWorker, setup_status
+from nexis.core.audio import input_options, level_percent
 from nexis.ui.pages import button, heading
 from nexis.ui.reactor import ReactorState, ReactorWidget
 
@@ -138,6 +140,7 @@ class VoicePage(QWidget):
         self.speech_service = None
         self.turn_error = False
         self.metrics = {}
+        self.hands_free_armed = False
         layout = QVBoxLayout(self)
         heading(
             layout,
@@ -159,6 +162,12 @@ class VoicePage(QWidget):
         self.cancel_button = button("Cancel turn", self.stop, capture)
         controls.addLayout(capture)
         self.stop_button.setEnabled(False)
+        self.hands_free = QCheckBox("Experimental hands-free follow-ups after Talk (microphone reopens after each reply)")
+        self.hands_free.setChecked(window.db.setting("voice_hands_free"))
+        self.hands_free.setAccessibleName("Opt in to visible hands-free follow-up recording after pressing Talk")
+        self.hands_free.toggled.connect(self.hands_free_changed)
+        controls.addWidget(self.hands_free)
+        button("Interrupt speech, then Talk", self.interrupt_and_talk, controls)
         self.indicator = QLabel("IDLE — MICROPHONE OFF")
         controls.addWidget(self.indicator)
         self.level = QProgressBar()
@@ -246,7 +255,7 @@ class VoicePage(QWidget):
             self.window.db.set_setting("voice_model_path", str(Path(path).resolve(strict=True)))
             self.refresh_setup()
 
-    def start(self):
+    def start(self, automatic=False):
         if (
             self.worker
             and self.worker.isRunning()
@@ -254,6 +263,8 @@ class VoicePage(QWidget):
         ):
             return
         try:
+            if self.window.db.setting("microphone_muted"):
+                raise ValueError("Hard mute is on. Select Wake / enable microphone first; no recording starts automatically.")
             require_access(self.window.db, "microphone_access")
         except ValueError as exc:
             self.failure(str(exc))
@@ -263,6 +274,8 @@ class VoicePage(QWidget):
             self.failure(message)
             return
         generation = self.turn.begin()
+        if not automatic:
+            self.hands_free_armed = self.hands_free.isChecked()
         self.turn_error = False
         self.pending_transcript = ""
         self.transcript.clear()
@@ -274,6 +287,29 @@ class VoicePage(QWidget):
         )
         self.capture_deadline = monotonic() + 3
         QTimer.singleShot(80, lambda: self.begin_capture(generation))
+
+    def hands_free_changed(self, enabled):
+        self.window.db.set_setting("voice_hands_free", enabled)
+        if not enabled:
+            self.stop()
+
+    def interrupt_and_talk(self):
+        self.stop()
+        self.start()
+
+    def schedule_follow_up(self):
+        generation = self.turn.generation
+
+        def follow_up():
+            if (generation == self.turn.generation and self.hands_free_armed
+                    and self.hands_free.isChecked() and self.turn.state == VoiceState.IDLE
+                    and self.window.isVisible() and not self.window.isMinimized()
+                    and not self.window.closing and not self.window.db.setting("microphone_muted")
+                    and self.window.stack.currentIndex() == self.window.pages["Voice Chat"]):
+                self.start(automatic=True)
+
+        if self.hands_free_armed:
+            QTimer.singleShot(500, follow_up)
 
     def begin_capture(self, generation):
         if generation != self.turn.generation or self.window.closing:
@@ -291,7 +327,8 @@ class VoicePage(QWidget):
             self.failure(str(exc))
             return
         worker = VoiceWorker(
-            self.window.db.setting("voice_model_path"), self.window.db.setting("audio_input")
+            self.window.db.setting("voice_model_path"), self.window.db.setting("audio_input"),
+            input_options(self.window.db),
         )
         self.worker = worker
 
@@ -326,7 +363,7 @@ class VoicePage(QWidget):
 
     def audio_level(self, value):
         self.reactor.set_audio_level(value)
-        self.level.setValue(min(100, int(value * 500)))
+        self.level.setValue(level_percent(value))
 
     def capture_measured(self, metrics):
         self.metrics = metrics
@@ -360,7 +397,10 @@ class VoicePage(QWidget):
         if worker.cancel.is_set():
             self.cancelled()
         elif not self.turn_error and self.pending_transcript:
-            self.submit_transcript()
+            if self.pending_transcript.casefold().strip(" .!?") in {"go to sleep", "sleep nexis", "sleep nexus", "hard mute"}:
+                self.window.set_microphone_muted(True)
+            else:
+                self.submit_transcript()
         elif not self.turn_error:
             self.failure(
                 "No speech was recognized. Check the live level and selected microphone, then Talk again. Nothing was sent."
@@ -418,9 +458,14 @@ class VoicePage(QWidget):
     def receive_reply(self, text):
         self.response.setPlainText(text)
         panel = self.window.settings_page.voice_setup
+        if self.window.db.setting("microphone_muted"):
+            self.change_state(VoiceState.IDLE)
+            self.status.setText("Hard mute is on. Reply retained without playback; use Wake to enable voice.")
+            return
         if not self.window.db.setting("tts_enabled"):
             self.change_state(VoiceState.IDLE)
             self.status.setText("Reply ready. Read-aloud is disabled in Settings.")
+            self.schedule_follow_up()
             return
         if not panel.speech or not panel.speech.isRunning():
             panel.start_speech()
@@ -450,6 +495,7 @@ class VoicePage(QWidget):
             self.status.setText(
                 "Ready for another turn. Speech synthesis completed; audible output requires your confirmation."
             )
+            self.schedule_follow_up()
         elif outcome == "CANCELLED":
             self.cancelled()
         else:
@@ -466,6 +512,7 @@ class VoicePage(QWidget):
         )
 
     def stop(self):
+        self.hands_free_armed = False
         self.turn.cancel()
         self.speech_id = None
         if self.worker and self.worker.isRunning():
