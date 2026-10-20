@@ -38,6 +38,10 @@ Ordinary websites open in the default browser. Advanced existing-tab focus/close
 
 ## Verification and current blockers
 
+**Workflows → Workflow Studio** optionally drafts a routine from your description. Review/edit the commands, use Dry-run validation, save, and use the existing Run control explicitly. Pause/resume/stop are in the Manual Command Deck; pause waits for the next step boundary. The experimental AI drafting flag is off by default.
+
+**Screen Awareness** is also off by default. Grant its separate capability in Settings, enable the feature, click Capture preview, and inspect it before approving a request to the disclosed provider. Vision support depends on your configured model. No image is sent automatically, no tool executes from its explanation, and cancellation cannot recall an already-approved transmission. Adapter formats follow [Google's image-input documentation](https://ai.google.dev/gemini-api/docs/generate-content/image-understanding) and [OpenAI-compatible image messages](https://developers.openai.com/api/docs/guides/images-vision); no model name or free-tier availability is assumed.
+
 See **docs/INSTALLER_PERMISSION_OVERHAUL.md** for the current build inventory, actual tests and remaining manual checks. Machine-specific historical evidence remains local and is not part of this source repository.
 
 Real provider inference depends on a working owner-configured provider and remains separately qualified. Three standalone speech cycles and five complete source/restart/executable/installer/portable voice cycles remain **PENDING USER VERIFICATION**. Windows 11, clean machines without Python, physical audio/hot-plug behavior and live taskbar grouping have not been certified. Automated fixtures never count as those real speech cycles.

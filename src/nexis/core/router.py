@@ -3,6 +3,7 @@ import logging
 import sqlite3
 from pathlib import Path
 from threading import Event
+from time import monotonic
 
 from nexis.actions.files import scoped
 from nexis.core.commands import REGISTRY
@@ -144,7 +145,8 @@ class Engine:
         return Preview(request.action, str(target), spec.description, risk), payload
 
     def execute(
-        self, text, cancel=None, on_step=lambda index, result: None, on_phase=lambda phase: None
+        self, text, cancel=None, on_step=lambda index, result: None, on_phase=lambda phase: None,
+        pause=None,
     ):
         cancel = cancel or Event()
         action = "unknown"
@@ -180,7 +182,7 @@ class Engine:
                 if preview.risk >= Risk.HIGH:
                     require_access(self.db, "sensitive_operations")
                 on_phase("EXECUTING")
-                result = self.dispatch(request, payload, cancel, on_step)
+                result = self.dispatch(request, payload, cancel, on_step, pause, on_phase)
         except (ValueError, OSError, sqlite3.Error, TypeError, KeyError) as exc:
             logging.getLogger("nexis").warning("Action failed (%s)", type(exc).__name__)
             result = Result(
@@ -195,7 +197,7 @@ class Engine:
             result.message += "\nHistory could not be saved; check local storage."
         return result
 
-    def dispatch(self, request, payload, cancel, on_step):
+    def dispatch(self, request, payload, cancel, on_step, pause=None, on_phase=lambda phase: None):
         action, arg = REGISTRY[request.action].handler, request.argument
         if action == "open":
             kind, target = payload
@@ -242,11 +244,26 @@ class Engine:
             return Result(True, "Command history cleared.")
         if action == "run":
             messages = []
+            deadline = monotonic() + 120
             for index, step in enumerate(payload, 1):
+                reported_pause = False
+                while pause and pause.is_set() and not cancel.is_set():
+                    require_access(self.db, "workflow_execution")
+                    if monotonic() >= deadline:
+                        return Result(False, "Workflow reached its two-minute deadline while paused. Completed steps are retained.\n" + "\n".join(messages))
+                    if not reported_pause:
+                        on_phase("PAUSED")
+                        reported_pause = True
+                    cancel.wait(0.05)
                 if cancel.is_set():
                     return Result(
                         False, "Workflow stopped before the next step.\n" + "\n".join(messages)
                     )
+                require_access(self.db, "workflow_execution")
+                if monotonic() >= deadline:
+                    return Result(False, "Workflow reached its two-minute deadline. Completed steps are retained.\n" + "\n".join(messages))
+                if reported_pause:
+                    on_phase("EXECUTING")
                 result = self.execute(step, cancel)
                 on_step(index, result)
                 messages.append(f"{index}. {result.message}")

@@ -45,6 +45,8 @@ from nexis.core.privacy import sanitize_request
 from nexis.core.identity import is_identity_question, identity_reply, provider_label
 from nexis.ui.memory_page import MemoryPage
 from nexis.ui.health_page import HealthPage
+from nexis.ui.workflow_studio import WorkflowStudio
+from nexis.ui.screen_page import ScreenPage
 
 
 class MainWindow(QMainWindow):
@@ -130,6 +132,9 @@ class MainWindow(QMainWindow):
             if table == "shortcuts":
                 self.discovery = DiscoveryPanel(self)
                 page.layout().insertWidget(2, self.discovery)
+            if table == "workflows":
+                self.workflow_studio = WorkflowStudio(self, page)
+                page.layout().insertWidget(2, self.workflow_studio)
             self.add_page(title, page)
         self.files = FilesPage(self)
         self.add_page("Files", self.files)
@@ -144,6 +149,8 @@ class MainWindow(QMainWindow):
         self.providers.changed.connect(self.refresh_provider_identity)
         self.providers.profile_saved.connect(self.refresh_provider_identity)
         self.refresh_provider_identity()
+        self.screen_awareness = ScreenPage(self)
+        self.add_page("Screen Awareness", self.screen_awareness)
         self.settings_page = SettingsPage(self)
         self.add_page("Settings", self.settings_page)
         about = QWidget()
@@ -312,6 +319,8 @@ class MainWindow(QMainWindow):
         self.execute.setObjectName("execute")
         self.stop = button("Stop", self.stop_command, row)
         self.stop.setEnabled(False)
+        self.pause_workflow_button = button("Pause workflow", self.pause_workflow, row)
+        self.pause_workflow_button.setEnabled(False)
         button("Collapse", lambda: self.toggle_drawer(False), row)
         self.drawer.body.addLayout(row)
         self.output = QPlainTextEdit()
@@ -503,6 +512,8 @@ class MainWindow(QMainWindow):
             self.settings_page.voice_setup.microphone.stop()
         if hasattr(self, "voice"):
             self.voice.stop()
+        if hasattr(self, "screen_awareness"):
+            self.screen_awareness.discard()
         super().hideEvent(event)
 
     def changeEvent(self, event):
@@ -511,9 +522,15 @@ class MainWindow(QMainWindow):
             if self.isMinimized() and hasattr(self, "voice"):
                 self.voice.stop()
                 self.settings_page.voice_setup.microphone.stop()
+                self.screen_awareness.discard()
             self.suspend_visuals(self.isMinimized())
 
     def set_state(self, state):
+        if state == "PAUSED":
+            self.assistant_state = ReactorState.IDLE
+            self.reactor.set_state(ReactorState.IDLE)
+            self.header_state.setText("●  WORKFLOW PAUSED")
+            return
         state = {"THINKING": "PROCESSING", "TRANSCRIBING": "PROCESSING", "CANCELLED": "IDLE"}.get(
             state, state
         )
@@ -555,6 +572,11 @@ class MainWindow(QMainWindow):
         self.conversation_history = self.conversation_history[-24:]
         if origin == "voice":
             self.voice.thinking()
+        if text.strip().casefold().rstrip(".?!") in {"explain this error on my screen", "explain my screen", "analyze my screen"}:
+            self.screen_awareness.question.setText(text[:1000])
+            self.navigate("Screen Awareness")
+            self.local_page_reply("Screen Awareness is ready for your explicit action. Enable the feature and screen permission if needed, click Capture preview, inspect it, then separately approve the destination before sending. Nothing has been captured or transmitted.", origin)
+            return
         memory_request = re.fullmatch(r"(remember|forget) this(?::\s*|\s+)(.+)", text, re.IGNORECASE | re.DOTALL)
         if memory_request and memory_request[1].casefold() == "remember":
             self.memories.draft(memory_request[2].strip())
@@ -668,6 +690,8 @@ class MainWindow(QMainWindow):
             *self.files.index_jobs,
             *self.memories.jobs,
             *self.health.jobs,
+            *self.workflow_studio.jobs,
+            *self.screen_awareness.jobs,
             self.voice.worker,
             *self.ai_jobs,
             *self.discovery.jobs,
@@ -693,6 +717,8 @@ class MainWindow(QMainWindow):
                 job.cancel.set()
                 if hasattr(job, "respond"):
                     job.respond(False)
+            self.workflow_studio.cancel()
+            self.screen_awareness.discard()
             dialogs.reject_pending(self)
         self.db.set_setting("microphone_muted", bool(muted))
         self.update_mute_label()
@@ -750,6 +776,8 @@ class MainWindow(QMainWindow):
             resource.setEnabled(False)
         self.radar.add_event()
         self.worker = CommandWorker(self.db, text, self.platform)
+        self.pause_workflow_button.setText("Pause workflow")
+        self.pause_workflow_button.setEnabled(text.lower().startswith("run "))
         self.worker.permission.connect(self.permission)
         self.worker.phase.connect(self.set_state)
         self.worker.step.connect(self.step_result)
@@ -814,6 +842,7 @@ class MainWindow(QMainWindow):
     def command_finished(self):
         self.execute.setEnabled(True)
         self.stop.setEnabled(False)
+        self.pause_workflow_button.setEnabled(False)
         self.chat.send_button.setEnabled(True)
         for resource in [*self.resources, self.settings_page]:
             resource.setEnabled(True)
@@ -826,6 +855,17 @@ class MainWindow(QMainWindow):
             self.output.appendPlainText(
                 "Stop requested. Already launched applications remain open."
             )
+
+    def pause_workflow(self):
+        if self.worker and self.worker.isRunning() and self.pause_workflow_button.isEnabled():
+            if self.worker.pause.is_set():
+                self.worker.pause.clear()
+                self.pause_workflow_button.setText("Pause workflow")
+                self.output.appendPlainText("Workflow resume requested; permissions are checked again before the next step.")
+            else:
+                self.worker.pause.set()
+                self.pause_workflow_button.setText("Resume workflow")
+                self.output.appendPlainText("Pause requested at the next step boundary. An action already submitted to Windows is not undone.")
 
     def refresh(self):
         for page in self.resources:

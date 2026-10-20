@@ -198,6 +198,9 @@ class VoiceSetupPanel(QGroupBox):
         )
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
+        languages = QLabel("Verified bundled speech language: English (United States). Hindi/Hinglish recognition is not validated and no verified pack for those languages is bundled. Unicode chat input is supported; response language and Windows voice availability depend on the selected provider/model and installed voices.")
+        languages.setWordWrap(True)
+        layout.addWidget(languages)
         row = QHBoxLayout()
         self.download_button = button(
             f"Set up {MODEL['language']} offline speech (41.2 MB)", self.download, row

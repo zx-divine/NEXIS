@@ -1,4 +1,5 @@
 from threading import Event
+from time import monotonic
 
 from PySide6.QtCore import QThread, Signal
 
@@ -18,17 +19,21 @@ class CommandWorker(QThread):
         super().__init__()
         self.db, self.text, self.platform = db, text, platform
         self.cancel = Event()
+        self.pause = Event()
         self.answer = Event()
         self.allowed = False
+        self.deadline = None
 
     def confirm(self, preview):
         self.answer.clear()
         self.allowed = False
         self.permission.emit(preview)
+        deadline = self.deadline or monotonic() + 180
         while not self.answer.wait(0.1):
-            if self.cancel.is_set():
+            if self.cancel.is_set() or monotonic() >= deadline:
+                self.cancel.set()
                 return False
-        return self.allowed and not self.cancel.is_set()
+        return self.allowed and not self.cancel.is_set() and monotonic() < deadline
 
     def respond(self, allowed):
         self.allowed = allowed
@@ -37,7 +42,12 @@ class CommandWorker(QThread):
     def run(self):
         try:
             engine = Engine(self.db, self.platform, Permissions(self.confirm))
-            result = engine.execute(self.text, self.cancel, self.step.emit, self.phase.emit)
+            effective_cancel = self.cancel
+            if self.text.strip().casefold().startswith("run "):
+                from nexis.core.tools import DeadlineCancel
+                effective_cancel = DeadlineCancel(self.cancel, 120)
+                self.deadline = effective_cancel.deadline
+            result = engine.execute(self.text, effective_cancel, self.step.emit, self.phase.emit, self.pause)
         except Exception as exc:
             import logging
 

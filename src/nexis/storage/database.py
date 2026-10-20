@@ -26,6 +26,8 @@ DEFAULTS = {
     "audio_input": "",
     "microphone_muted": False,
     "voice_hands_free": False,
+    "workflow_drafting_enabled": False,
+    "screen_awareness_enabled": False,
     "mic_sensitivity": 100,
     "mic_noise_floor": 0.001,
     "mic_calibration_device": "",

@@ -22,6 +22,10 @@ Local Memory is opt-in per save/import and is never automatically sent to an AI 
 
 Provider addresses require validated HTTPS except approved loopback HTTP local servers. Redirects are rejected, response sizes and IO timeouts are bounded, and cancellation is checked before executing actions. User-configured gateways remain a trust decision. Tool output, filenames and document contents are untrusted data and cannot grant permissions.
 
+Experimental Screen Awareness needs a separately granted capture capability, a direct capture action, preview and fresh destination confirmation before sending an image. It never captures continuously or writes screenshot files. The owner must hide private/credential content before capturing; no claim of automatic visual secret detection is made. Cancel/discard before sending prevents transmission. Once transmission is approved and starts, bytes already sent cannot be recalled. Vision responses are plain explanation text, isolated from tools, memory and conversation history. Protected/secure desktop capture is not bypassed.
+
+Workflow Studio generates editable drafts only. A draft cannot authorize execution, bypass grants or introduce shell commands. Existing saved routines require manual Run and retain execution-time permission/target checks. Pause takes effect at step boundaries; cancellation does not reverse completed external actions. Cooperative deadlines do not forcibly interrupt an operating-system call already in progress.
+
 ## Release qualification
 
 Automated fixtures do not establish hardware recognition, audible output, clean-machine compatibility or penetration-test coverage. Review the current engineering handoff for actual checks and outstanding gates. A source/credential heuristic scan does not prove absence of all vulnerabilities. Dependency advisory review, appropriate owner licensing, code signing and clean Windows/hardware testing remain release considerations. No installer publication or GitHub Release is automatic or authorized by a source push.
