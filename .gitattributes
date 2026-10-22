@@ -1,0 +1,4 @@
+# Preserve upstream licence bytes, including their original whitespace/newlines.
+assets/licenses/runtime/** -text whitespace=-blank-at-eol,-blank-at-eof
+assets/licenses/Qt-*.txt -text
+assets/licenses/vosk-COPYING.txt -text

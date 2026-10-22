@@ -11,6 +11,7 @@ root = Path(__file__).resolve().parents[1]
 os.chdir(root)
 subprocess.run([sys.executable, str(root / "scripts/prepare_branding.py")], check=True)
 subprocess.run([sys.executable, str(root / "scripts/prepare_model.py"), "--download"], check=True)
+subprocess.run([sys.executable, str(root / "scripts/prepare_runtime_notices.py")], check=True)
 subprocess.run([sys.executable, "-m", "pytest", "-q"], check=True)
 subprocess.run([sys.executable, "-m", "ruff", "check", "src", "tests", "scripts"], check=True)
 subprocess.run([sys.executable, "-m", "PyInstaller", "--noconfirm", "NEXIS.spec"], check=True)

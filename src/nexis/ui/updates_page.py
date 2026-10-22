@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
     QComboBox, QMessageBox, QFileDialog,
 )
 
-from nexis import __version__
+from nexis import DISPLAY_VERSION
 from nexis.core.access import require_access
 from nexis.core.updates import check_updates, official_url, verify_download
 from nexis.ui.pages import heading, button
@@ -22,7 +22,7 @@ class UpdatesPage(QWidget):
         super().__init__()
         self.window, self.jobs, self.release = window, [], None
         layout = QVBoxLayout(self)
-        heading(layout, "OFFICIAL UPDATES", "Installed version " + __version__ + ". Discovery only from github.com/zx-divine/nexis. No account, automatic installer execution, security bypass or user-data migration is performed here.")
+        heading(layout, "OFFICIAL UPDATES", "Installed " + DISPLAY_VERSION + ". Discovery only from github.com/zx-divine/nexis. No account, automatic installer execution, security bypass or user-data migration is performed here.")
         self.automatic = QCheckBox("Check official release metadata on startup, at most once daily (optional)")
         self.automatic.setChecked(window.db.setting("update_checks_enabled"))
         self.automatic.toggled.connect(lambda enabled: window.db.set_setting("update_checks_enabled", enabled))

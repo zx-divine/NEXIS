@@ -11,6 +11,9 @@ import ctypes
 import tomllib
 
 root = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(root / "src"))
+from nexis import DISPLAY_VERSION, PUBLIC_VERSION, RELEASE_CHANNEL  # noqa: E402
+
 folder = root / "dist" / "NEXIS"
 exe = folder / "NEXIS.exe"
 if not exe.is_file():
@@ -69,7 +72,15 @@ subprocess.run(
 report = json.loads((output / "packaged-smoke.json").read_text(encoding="utf-8"))
 assert report["ok"] and report["frozen"] and report["stylesheet_loaded"]
 assert report["app_version"] == version
+assert report["display_version"] == DISPLAY_VERSION
+assert report["public_version"] == PUBLIC_VERSION and report["release_channel"] == RELEASE_CHANNEL
+assert (folder / "_internal/LICENSE").read_bytes() == (root / "LICENSE").read_bytes()
+assert (folder / "_internal/RELEASE_CHANNEL.txt").read_bytes() == (root / "assets/RELEASE_CHANNEL.txt").read_bytes()
+for notice in (root / "assets/licenses").rglob("*"):
+    if notice.is_file():
+        assert (folder / "_internal/licenses" / notice.relative_to(root / "assets/licenses")).read_bytes() == notice.read_bytes()
 assert report["workflow_fixture_check"]["result"] == "PASS"
+assert report["workflow_fixture_check"]["cancelled_delivery_blocked"]
 assert report["bundled_model"]["loaded"] and report["bundled_model"]["inside_package"]
 assert report["bundled_model"]["files_verified"] == 14
 assert report["bundled_model"]["narrowband_default_selected_rate"] == 16000
@@ -96,6 +107,10 @@ assert struct.unpack_from("<H", binary, pe_offset + 4)[0] == 0x8664, (
 )
 sys.path.insert(0, str(root / ".dev-deps"))
 import pefile  # noqa: E402
+import certifi  # noqa: E402
+
+assert report["certifi_version"] == certifi.__version__ == "2026.10.19"
+assert report["certifi_bundle_sha256"] == hashlib.sha256(Path(certifi.where()).read_bytes()).hexdigest()
 
 pe = pefile.PE(str(exe))
 icon_groups = next(e for e in pe.DIRECTORY_ENTRY_RESOURCE.entries if e.id == 14)
@@ -108,11 +123,20 @@ for group in icon_groups.directory.entries:
         icon_sizes.update(data[6 + i * 14] or 256 for i in range(count))
 assert icon_sizes == {16, 24, 32, 48, 64, 128, 256}
 fixed = pe.VS_FIXEDFILEINFO[0]
+strings = {
+    key.decode(): value.decode()
+    for entry in pe.FileInfo
+    for item in entry if item.Key == b"StringFileInfo"
+    for table in item.StringTable
+    for key, value in table.entries.items()
+}
+assert strings["ProductVersion"] == DISPLAY_VERSION
 actual_version = (fixed.FileVersionMS >> 16, fixed.FileVersionMS & 65535, fixed.FileVersionLS >> 16)
 assert actual_version == tuple(int(part) for part in version.split("."))
 report.update(
     {
         "file_version": ".".join(str(part) for part in actual_version),
+        "product_version": strings["ProductVersion"],
         "exe_sha256": hashlib.sha256(binary).hexdigest(),
         "distribution_files": len(files),
         "distribution_mb": round(sum(p.stat().st_size for p in files) / 1048576, 2),

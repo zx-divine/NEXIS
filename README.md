@@ -1,4 +1,4 @@
-# NEXIS Desktop 1.3.3 — Crimson Command
+# NEXIS Desktop v1.0 Launch Candidate — engineering build 1.3.4
 
 NEXIS combines online AI conversation, explicit microphone control and permission-controlled Windows tools in the existing Crimson Command HUD. This local build is under verification; it is not a qualified public release.
 
@@ -62,4 +62,9 @@ Use Python 3.12 x64 in an isolated environment, install requirements-dev.txt, an
 The supported NEXIS target is Windows 10 build 19045+ (x64), or Windows 11. Windows supplies SAPI voices, audio drivers and standard system fonts. The one-folder application bundles Python, Qt, native audio libraries and the default offline model. Always keep NEXIS.exe with its adjacent _internal folder.
 
 
-The local 1.3.3 candidate is `dist/NEXIS/NEXIS.exe`; its installer is `dist/installer/NEXIS-Desktop-1.3.3.0-Setup.exe`, and its portable archive is `dist/NEXIS-Desktop-1.3.3-Windows-x64-Portable.zip`. These are local verification candidates, not a published release. The previous 1.3.2 distribution is retained separately. Run `python scripts/verify_five_rounds.py` for five serial regression processes with fresh temporary test state and an unchanged-source fingerprint. Local evidence is excluded from source publication.
+The local engineering 1.3.4 launch candidate is `dist/NEXIS/NEXIS.exe`; its installer is `dist/installer/NEXIS-Desktop-1.3.4.0-Setup.exe`, and its portable archive is `dist/NEXIS-Desktop-1.3.4-Windows-x64-Portable.zip`. These are local verification candidates, not a published release. The previous 1.3.2 distribution and 1.3.3 candidate are retained separately. Run `python scripts/verify_five_rounds.py` for five serial regression processes with fresh temporary test state and an unchanged-source fingerprint. Local evidence is excluded from source publication.
+
+
+## v1.0 launch preparation
+
+This is a **candidate**, not v1.0 Stable. See [launch preparation](docs/LAUNCH_PREPARATION.md). Public branding targets v1.0; monotonic engineering/Windows version 1.3.4 preserves prior 1.3.x history. The application licence is unresolved. Real voice and clean-Windows qualification remain mandatory. No binary release or website deployment is authorized.

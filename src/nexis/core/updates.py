@@ -9,7 +9,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit, unquote
 from urllib.request import Request, build_opener
 
-from nexis import __version__
+from nexis import __version__, PUBLIC_VERSION, RELEASE_CHANNEL
 from nexis.core.providers import RejectRedirect
 
 API = "https://api.github.com/repos/zx-divine/nexis/releases/latest"
@@ -40,7 +40,7 @@ def official_url(value, tag, asset=False):
     return value
 
 
-def parse_release(data, current=__version__):
+def parse_release(data, current=None):
     if not isinstance(data, dict) or data.get("draft") is not False or data.get("prerelease") is not False:
         raise ValueError("No supported public stable release was returned.")
     tag = data.get("tag_name")
@@ -61,15 +61,21 @@ def parse_release(data, current=__version__):
             assets.append({"name": unquote(urlsplit(url).path).split("/")[-1], "url": url, "bytes": size, "sha256": digest})
         except (ValueError, AttributeError):
             continue
-    return {"available": latest > version(current), "tag": tag, "page": page,
+    # Public v1.0.0 follows internal engineering 1.3.x. Compare public versions,
+    # and offer the stable build to a candidate of that same public version.
+    baseline = version(PUBLIC_VERSION if current is None else current)
+    available = latest > baseline or (
+        current is None and RELEASE_CHANNEL != "stable" and latest == baseline
+    )
+    return {"available": available, "tag": tag, "page": page,
             "notes": notes[:12000], "assets": assets}
 
 
-def check_updates(cancel, opener=None, current=__version__):
+def check_updates(cancel, opener=None, current=None):
     if cancel.is_set():
         raise ValueError("Update check cancelled.")
     request = Request(API, headers={"Accept": "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "NEXIS-Desktop/" + current})
+        "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "NEXIS-Desktop/" + __version__})
     try:
         with (opener or build_opener(RejectRedirect()).open)(request, timeout=8) as response:
             chunks, size, deadline = [], 0, monotonic() + 15

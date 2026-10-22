@@ -1,0 +1,26 @@
+Qt / PySide / Shiboken notice for local launch-candidate review
+
+The installed PySide6_Essentials and shiboken6 6.12.0 metadata declares:
+LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only. A commercial Qt licence is not assumed.
+Unmodified upstream licence texts are included for review. No NEXIS application
+licence is granted by these third-party texts.
+
+This one-folder build dynamically loads Qt and PySide/Shiboken libraries from
+_internal. It does not cryptographically lock those libraries to the executable.
+To test a modified library, close NEXIS, privately back up the complete folder,
+build compatible Windows x64 release libraries from the matching upstream source,
+and replace the corresponding DLLs/extensions/plugins in that private test copy.
+Keep architecture, compiler ABI, Python ABI and Qt/PySide/Shiboken interfaces
+compatible. Do not replace Windows system DLLs or disable Windows security.
+Test in the separate copy; do not overwrite your working installation.
+
+Matching upstream source locations (6.12.0):
+https://code.qt.io/cgit/qt/qtbase.git/tree/?h=v6.12.0
+https://code.qt.io/cgit/qt/qtsvg.git/tree/?h=v6.12.0
+https://code.qt.io/cgit/pyside/pyside-setup.git/tree/?h=v6.12.0
+Licensing obligations: https://www.qt.io/development/open-source-lgpl-obligations
+
+Before any public distribution ASH must complete the applicable licence review,
+including corresponding-source availability/offer, required notices and practical
+library replacement. These pointers/instructions are not a claim that all legal
+obligations have been fulfilled. Application licensing remains unresolved.

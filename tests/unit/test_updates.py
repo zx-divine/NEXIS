@@ -29,6 +29,24 @@ def test_semantic_versions_and_missing_public_release():
     assert not result["available"] and not result["assets"] and not result["page"]
 
 
+def test_first_public_stable_is_offered_to_internal_launch_candidate():
+    # Engineering 1.3.x must not suppress the first public v1.0.0 release.
+    data = release(tag_name="v1.0.0", html_url="https://github.com/zx-divine/nexis/releases/tag/v1.0.0")
+    assert parse_release(data)["available"]
+    assert not parse_release(data, "1.0.0")["available"]
+
+
+def test_stable_channel_does_not_offer_same_public_version(monkeypatch):
+    monkeypatch.setattr("nexis.core.updates.RELEASE_CHANNEL", "stable")
+    data = release(tag_name="v1.0.0", html_url="https://github.com/zx-divine/nexis/releases/tag/v1.0.0")
+    assert not parse_release(data)["available"]
+
+
+def test_launch_candidate_never_offers_older_public_release():
+    data = release(tag_name="v0.9.0", html_url="https://github.com/zx-divine/nexis/releases/tag/v0.9.0")
+    assert not parse_release(data)["available"]
+
+
 @pytest.mark.parametrize("url", [
     "http://github.com/zx-divine/nexis/releases/tag/v1.3.9",
     "https://github.com.evil.example/zx-divine/nexis/releases/tag/v1.3.9",

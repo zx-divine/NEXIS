@@ -360,6 +360,7 @@ class ToolExecutor:
                 preview
             ):
                 raise ValueError("Permission denied or cancelled. This step was not executed.")
+            self.progress("EXECUTING " + tool.name)
             require_access(
                 self.db, tool.category
             )  # Revocation while a preview was open takes effect immediately.
@@ -368,7 +369,6 @@ class ToolExecutor:
             if risk >= Risk.HIGH:
                 require_access(self.db, "sensitive_operations")
             deadline = DeadlineCancel(cancel, tool.timeout)
-            self.progress("EXECUTING " + tool.name)
             result = self.dispatch(tool.name, args, deadline)
             if deadline.is_set():
                 raise ValueError(
@@ -406,6 +406,8 @@ class ToolExecutor:
             )
 
     def dispatch(self, name, args, cancel):
+        if cancel.is_set():
+            raise ValueError("Operation cancelled or expired before dispatch; no action was submitted.")
         if name == "app_open":
             result = self.engine.execute("open " + args["name"], cancel)
             if not result.ok:

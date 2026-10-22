@@ -26,6 +26,64 @@ def step(tool, **arguments):
     return {"tool": tool, "arguments": arguments}
 
 
+@pytest.mark.parametrize("when", ["confirmation", "progress"])
+def test_cancellation_at_execution_boundary_prevents_clipboard_delivery(db, tmp_path, platform, when):
+    cancel, deliveries = Event(), []
+
+    def confirm(preview):
+        if when == "confirmation":
+            cancel.set()
+        return True
+
+    def progress(text):
+        if when == "progress":
+            cancel.set()
+
+    executor = ToolExecutor(db, tmp_path, platform, confirm, deliveries.append, progress)
+    with pytest.raises(ValueError):
+        executor.run(step("clipboard_copy", text="disposable regression fixture"), cancel)
+    assert not deliveries
+
+
+def test_manual_execution_phase_cancellation_prevents_launch(db, platform):
+    from nexis.core.router import Engine
+    cancel = Event()
+
+    def phase(value):
+        if value == "EXECUTING":
+            cancel.set()
+
+    result = Engine(db, platform).execute("open notepad", cancel, on_phase=phase)
+    assert not result.ok and not platform.calls
+
+
+def test_progress_grant_revocation_prevents_clipboard_delivery(db, tmp_path, platform):
+    deliveries = []
+
+    def revoke(text):
+        grants = db.setting("access_permissions")
+        grants["clipboard_access"] = False
+        db.set_setting("access_permissions", grants)
+
+    executor = ToolExecutor(db, tmp_path, platform, lambda preview: True, deliveries.append, revoke)
+    with pytest.raises(ValueError, match="Permission denied"):
+        executor.run(step("clipboard_copy", text="disposable regression fixture"), Event())
+    assert not deliveries
+
+
+def test_manual_execution_phase_revocation_prevents_launch(db, platform):
+    from nexis.core.router import Engine
+
+    def phase(value):
+        if value == "EXECUTING":
+            grants = db.setting("access_permissions")
+            grants["application_launching"] = False
+            db.set_setting("access_permissions", grants)
+
+    result = Engine(db, platform).execute("open notepad", Event(), on_phase=phase)
+    assert not result.ok and not platform.calls
+
+
 def test_fresh_permissions_are_denied_and_separate_from_credentials(tmp_path):
     database = Database(tmp_path / "fresh.db")
     try:

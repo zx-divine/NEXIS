@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from nexis import __version__
+from nexis import __version__, DISPLAY_VERSION
 from nexis.branding import application_icon
 from nexis.ui.branding import BrandLogo
 from nexis.core.commands import REGISTRY
@@ -68,7 +68,7 @@ class MainWindow(QMainWindow):
         self.worker = None
         self.origin = "manual"
         self.assistant_state = ReactorState.IDLE
-        self.setWindowTitle("NEXIS Desktop v" + __version__ + " — CRIMSON COMMAND")
+        self.setWindowTitle("NEXIS Desktop " + DISPLAY_VERSION + " — CRIMSON COMMAND")
         self.resize(1366, 768)
         self.setMinimumSize(820, 600)
         central = QWidget()
@@ -163,7 +163,7 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(about)
         layout.addWidget(BrandLogo(128))
         heading(
-            layout, "ABOUT / DIAGNOSTICS", "NEXIS Desktop v" + __version__ + " — Crimson Command"
+            layout, "ABOUT / DIAGNOSTICS", "NEXIS Desktop " + DISPLAY_VERSION + " — Crimson Command"
         )
         info = QLabel(
             "Crimson Command HUD with online AI, permission-controlled Windows tools and manual commands.\n"
@@ -206,7 +206,7 @@ class MainWindow(QMainWindow):
         return label
 
     def build_header(self, root):
-        panel = HUDPanel("NEXIS DESKTOP   /   CRIMSON COMMAND", "v" + __version__)
+        panel = HUDPanel("NEXIS DESKTOP   /   CRIMSON COMMAND", DISPLAY_VERSION)
         row = QHBoxLayout()
         brand = QLabel("N E X I S")
         brand.setObjectName("brand")
@@ -350,7 +350,7 @@ class MainWindow(QMainWindow):
         )
         root.addWidget(self.deck)
         foot = QHBoxLayout()
-        foot.addWidget(self.small_label("NEXIS " + __version__ + "  //  LOCAL AUTHORITY"))
+        foot.addWidget(self.small_label("NEXIS " + DISPLAY_VERSION + "  //  LOCAL AUTHORITY"))
         foot.addStretch()
         self.motion_label = self.small_label("IDLE MOTION 8 FPS / ACTIVE TARGET 30 FPS")
         foot.addWidget(self.motion_label)

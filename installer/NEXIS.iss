@@ -1,12 +1,20 @@
 ; Compile after PyInstaller: ISCC.exe installer\NEXIS.iss
 ; Stable identity must match nexis.branding.APP_USER_MODEL_ID.
 #define AppVersion GetVersionNumbersString("..\dist\NEXIS\NEXIS.exe")
+#define AppDisplayVersion GetStringFileInfo("..\dist\NEXIS\NEXIS.exe", "ProductVersion")
 #define AppModelID "NEXIS.Desktop"
 
 [Setup]
 AppId={{F462E4BE-1F1F-428C-AD8C-4B5C06972164}
 AppName=NEXIS Desktop
 AppVersion={#AppVersion}
+AppVerName=NEXIS Desktop {#AppDisplayVersion}
+AppPublisher=ASH
+VersionInfoVersion={#AppVersion}
+VersionInfoTextVersion={#AppVersion}
+VersionInfoProductVersion={#AppVersion}
+VersionInfoProductTextVersion={#AppDisplayVersion}
+VersionInfoDescription=NEXIS Desktop {#AppDisplayVersion} Setup
 DefaultDirName={localappdata}\Programs\NEXIS Desktop
 DefaultGroupName=NEXIS Desktop
 DisableProgramGroupPage=yes

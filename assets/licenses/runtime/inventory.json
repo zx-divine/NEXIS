@@ -1,0 +1,345 @@
+{
+  "scope": "Installed default runtime requirement closure; excludes development extras",
+  "not_a_license_grant": true,
+  "packages": [
+    {
+      "name": "annotated-types",
+      "version": "0.8.0",
+      "declared_license": "MIT",
+      "notice_files": [
+        "annotated-types/annotated_types-0.8.0.dist-info_licenses_LICENSE"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "anyio",
+      "version": "4.15.1",
+      "declared_license": "MIT",
+      "notice_files": [
+        "anyio/anyio-4.15.1.dist-info_licenses_LICENSE"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "certifi",
+      "version": "2026.10.19",
+      "declared_license": "MPL-2.0",
+      "notice_files": [
+        "certifi/certifi-2026.10.19.dist-info_licenses_LICENSE"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "cffi",
+      "version": "2.1.1",
+      "declared_license": "MIT-0",
+      "notice_files": [
+        "cffi/cffi-2.1.1.dist-info_licenses_LICENSE"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "charset-normalizer",
+      "version": "3.5.2",
+      "declared_license": "MIT",
+      "notice_files": [
+        "charset-normalizer/charset_normalizer-3.5.2.dist-info_licenses_LICENSE"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "colorama",
+      "version": "0.4.6",
+      "declared_license": "Unspecified",
+      "notice_files": [
+        "colorama/colorama-0.4.6.dist-info_licenses_LICENSE.txt"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "cryptography",
+      "version": "50.0.2",
+      "declared_license": "Apache-2.0 OR BSD-3-Clause",
+      "notice_files": [
+        "cryptography/cryptography-50.0.2.dist-info_licenses_LICENSE"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "distro",
+      "version": "1.9.0",
+      "declared_license": "Apache License, Version 2.0",
+      "notice_files": [
+        "distro/distro-1.9.0.dist-info_LICENSE"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "google-auth",
+      "version": "2.62.0",
+      "declared_license": "Apache 2.0",
+      "notice_files": [
+        "google-auth/google_auth-2.62.0.dist-info_licenses_LICENSE"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "google-genai",
+      "version": "2.31.0",
+      "declared_license": "Apache-2.0",
+      "notice_files": [
+        "google-genai/google_genai-2.31.0.dist-info_licenses_LICENSE"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "h11",
+      "version": "0.16.0",
+      "declared_license": "MIT",
+      "notice_files": [
+        "h11/h11-0.16.0.dist-info_licenses_LICENSE.txt"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "httpcore",
+      "version": "1.0.9",
+      "declared_license": "BSD-3-Clause",
+      "notice_files": [
+        "httpcore/httpcore-1.0.9.dist-info_licenses_LICENSE.md"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "httpx",
+      "version": "0.28.1",
+      "declared_license": "BSD-3-Clause",
+      "notice_files": [
+        "httpx/httpx-0.28.1.dist-info_licenses_LICENSE.md"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "idna",
+      "version": "3.20",
+      "declared_license": "BSD-3-Clause",
+      "notice_files": [
+        "idna/idna-3.20.dist-info_licenses_LICENSE.md"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "pyasn1",
+      "version": "0.6.4",
+      "declared_license": "BSD-2-Clause",
+      "notice_files": [
+        "pyasn1/pyasn1-0.6.4.dist-info_licenses_LICENSE.rst"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "pyasn1_modules",
+      "version": "0.4.2",
+      "declared_license": "BSD",
+      "notice_files": [
+        "pyasn1-modules/pyasn1_modules-0.4.2.dist-info_licenses_LICENSE.txt"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "pycparser",
+      "version": "3.11",
+      "declared_license": "BSD-3-Clause",
+      "notice_files": [
+        "pycparser/pycparser-3.11.dist-info_licenses_LICENSE"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "pydantic",
+      "version": "2.14.1",
+      "declared_license": "MIT",
+      "notice_files": [
+        "pydantic/pydantic-2.14.1.dist-info_licenses_LICENSE"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "pydantic_core",
+      "version": "2.50.1",
+      "declared_license": "MIT",
+      "notice_files": [
+        "pydantic-core/pydantic_core-2.50.1.dist-info_licenses_LICENSE"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "PySide6_Essentials",
+      "version": "6.12.0",
+      "declared_license": "LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only",
+      "notice_files": [
+        "pyside6-essentials/pyside6_essentials-6.12.0.dist-info_licenses_LicenseRef-Qt-Commercial.txt"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "pywin32",
+      "version": "312",
+      "declared_license": "PSF",
+      "notice_files": [
+        "pywin32/adodbapi_license.txt",
+        "pywin32/pythonwin_License.txt",
+        "pywin32/pythonwin_pywin_idle_LICENSE.txt",
+        "pywin32/pywin32-312.dist-info_licenses_adodbapi_license.txt",
+        "pywin32/pywin32-312.dist-info_licenses_com_License.txt",
+        "pywin32/pywin32-312.dist-info_licenses_com_win32comext_mapi_src_MAPIStubLibrary_LICENSE",
+        "pywin32/pywin32-312.dist-info_licenses_isapi_README.txt",
+        "pywin32/pywin32-312.dist-info_licenses_pythonwin_License.txt",
+        "pywin32/pywin32-312.dist-info_licenses_pythonwin_Scintilla_License.txt",
+        "pywin32/pywin32-312.dist-info_licenses_pythonwin_pywin_idle_LICENSE.txt",
+        "pywin32/pywin32-312.dist-info_licenses_win32_License.txt",
+        "pywin32/win32_License.txt",
+        "pywin32/win32com_License.txt",
+        "pywin32/win32comext_License.txt",
+        "pywin32/win32comext_mapi_NOTICE.md"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "requests",
+      "version": "2.34.2",
+      "declared_license": "Apache-2.0",
+      "notice_files": [
+        "requests/requests-2.34.2.dist-info_licenses_LICENSE",
+        "requests/requests-2.34.2.dist-info_licenses_NOTICE"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "Send2Trash",
+      "version": "2.1.0",
+      "declared_license": "BSD-3-Clause",
+      "notice_files": [
+        "send2trash/send2trash-2.1.0.dist-info_licenses_LICENSE"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "shiboken6",
+      "version": "6.12.0",
+      "declared_license": "LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only",
+      "notice_files": [
+        "shiboken6/shiboken6-6.12.0.dist-info_licenses_LicenseRef-Qt-Commercial.txt"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "sniffio",
+      "version": "1.3.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "notice_files": [
+        "sniffio/sniffio-1.3.1.dist-info_LICENSE"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "sounddevice",
+      "version": "0.5.6",
+      "declared_license": "MIT",
+      "notice_files": [
+        "sounddevice/sounddevice-0.5.6.dist-info_licenses_LICENSE"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "srt",
+      "version": "3.5.3",
+      "declared_license": "MIT",
+      "notice_files": [
+        "srt/srt-3.5.3.dist-info_licenses_LICENSE"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "tenacity",
+      "version": "9.1.4",
+      "declared_license": "Apache 2.0",
+      "notice_files": [
+        "tenacity/tenacity-9.1.4.dist-info_licenses_LICENSE"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "tqdm",
+      "version": "4.70.1",
+      "declared_license": "MPL-2.0 AND MIT",
+      "notice_files": [
+        "tqdm/tqdm-4.70.1.dist-info_licenses_LICENCE"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "typing_extensions",
+      "version": "4.16.0",
+      "declared_license": "PSF-2.0",
+      "notice_files": [
+        "typing-extensions/typing_extensions-4.16.0.dist-info_licenses_LICENSE"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "typing-inspection",
+      "version": "0.4.4",
+      "declared_license": "MIT",
+      "notice_files": [
+        "typing-inspection/typing_inspection-0.4.4.dist-info_licenses_LICENSE"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "urllib3",
+      "version": "2.8.0",
+      "declared_license": "MIT",
+      "notice_files": [
+        "urllib3/urllib3-2.8.0.dist-info_licenses_LICENSE.txt"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "vosk",
+      "version": "0.3.45",
+      "declared_license": "UNKNOWN",
+      "notice_files": [
+        "vosk/COPYING.txt"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "webrtcvad-wheels",
+      "version": "2.0.14",
+      "declared_license": "MIT",
+      "notice_files": [
+        "webrtcvad-wheels/webrtcvad_wheels-2.0.14.dist-info_LICENSE"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "websocket-client",
+      "version": "1.9.0",
+      "declared_license": "Apache-2.0",
+      "notice_files": [
+        "websocket-client/websocket_client-1.9.0.dist-info_licenses_LICENSE"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "websockets",
+      "version": "16.1.1",
+      "declared_license": "BSD-3-Clause",
+      "notice_files": [
+        "websockets/websockets-16.1.1.dist-info_licenses_LICENSE"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    }
+  ]
+}

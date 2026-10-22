@@ -177,11 +177,11 @@ class Engine:
             elif cancel.is_set():
                 result = Result(False, "Cancelled before execution.")
             else:
+                on_phase("EXECUTING")
                 if category:
                     require_access(self.db, category)
                 if preview.risk >= Risk.HIGH:
                     require_access(self.db, "sensitive_operations")
-                on_phase("EXECUTING")
                 result = self.dispatch(request, payload, cancel, on_step, pause, on_phase)
         except (ValueError, OSError, sqlite3.Error, TypeError, KeyError) as exc:
             logging.getLogger("nexis").warning("Action failed (%s)", type(exc).__name__)
@@ -198,6 +198,8 @@ class Engine:
         return result
 
     def dispatch(self, request, payload, cancel, on_step, pause=None, on_phase=lambda phase: None):
+        if cancel.is_set():
+            return Result(False, "Cancelled or expired before dispatch; no action was submitted.")
         action, arg = REGISTRY[request.action].handler, request.argument
         if action == "open":
             kind, target = payload

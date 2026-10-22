@@ -13,7 +13,9 @@ root = Path(__file__).resolve().parents[1]
 site.addsitedir(str(root / ".dev-deps"))
 sys.path.insert(0, str(root / "src"))
 from nexis.platform.discovery import known_folder  # noqa: E402
+from nexis import DISPLAY_VERSION  # noqa: E402
 from PySide6.QtCore import QCoreApplication, QStandardPaths  # noqa: E402
+import pefile  # noqa: E402
 
 if "--install" not in sys.argv:
     raise SystemExit("Use --install only for an authorized local installation test.")
@@ -36,6 +38,20 @@ output = root / "docs/installer-overhaul/installed"
 output.mkdir(parents=True, exist_ok=True)
 version = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
 installer = root / "dist/installer" / ("NEXIS-Desktop-" + version + ".0-Setup.exe")
+pe = pefile.PE(str(installer))
+fixed = pe.VS_FIXEDFILEINFO[0]
+numeric = (fixed.FileVersionMS >> 16, fixed.FileVersionMS & 65535,
+           fixed.FileVersionLS >> 16, fixed.FileVersionLS & 65535)
+assert numeric == (*map(int, version.split(".")), 0), "Installer binary version mismatch"
+assert (fixed.ProductVersionMS >> 16, fixed.ProductVersionMS & 65535,
+        fixed.ProductVersionLS >> 16, fixed.ProductVersionLS & 65535) == numeric
+strings = {key.decode(): value.decode().strip()
+           for entry in pe.FileInfo for item in entry if item.Key == b"StringFileInfo"
+           for table in item.StringTable for key, value in table.entries.items()}
+assert strings["FileVersion"] == version + ".0", "Installer textual file version mismatch"
+assert strings["ProductVersion"] == DISPLAY_VERSION, "Installer public candidate identity mismatch"
+assert DISPLAY_VERSION in strings["FileDescription"]
+pe.close()
 subprocess.run(
     [
         str(installer),
@@ -97,6 +113,10 @@ assert smoke["bundled_model"]["files_verified"] == 14
 assert Path(smoke["logo_path"]).is_relative_to(directory)
 assert before == snapshot(), "Isolated smoke test changed actual user data"
 report = {
+    "installer_metadata": {"numeric_version": list(numeric),
+                           "text_version": strings["FileVersion"],
+                           "product_version": strings["ProductVersion"],
+                           "description": strings["FileDescription"]},
     "installed_directory": str(directory),
     "installed_executable_matches": True,
     "user_data_unchanged": True,

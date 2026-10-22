@@ -4,6 +4,7 @@ import json
 import hashlib
 import ctypes
 import sys
+import certifi
 from pathlib import Path
 import tempfile
 from time import perf_counter
@@ -15,7 +16,7 @@ from nexis.storage.database import Database
 from nexis.branding import APP_USER_MODEL_ID, asset
 from nexis.ui.branding import BrandLogo, WelcomeWizard, splash_screen
 from nexis.ui.main_window import MainWindow
-from nexis import __version__
+from nexis import __version__, DISPLAY_VERSION, PUBLIC_VERSION, RELEASE_CHANNEL
 
 
 def smoke(app, output):
@@ -94,6 +95,11 @@ def smoke(app, output):
             report = {
                 "ok": True,
                 "app_version": __version__,
+                "display_version": DISPLAY_VERSION,
+                "public_version": PUBLIC_VERSION,
+                "release_channel": RELEASE_CHANNEL,
+                "certifi_version": certifi.__version__,
+                "certifi_bundle_sha256": hashlib.sha256(Path(certifi.where()).read_bytes()).hexdigest(),
                 "frozen": bool(getattr(sys, "frozen", False)),
                 "python_network_blocked": "--offline-smoke" in sys.argv,
                 "network_connection_attempts": len(network_attempts),
@@ -208,8 +214,24 @@ def workflow_fixture_check(temporary):
         result = executor.run({"tool": "workflow_run", "arguments": {"name": "fixture"}}, Event())
         if deliveries != ["Disposable package fixture"] or not result.get("request_accepted") or result.get("verified"):
             raise ValueError("Packaged workflow failed its clipboard delivery boundary check.")
+        # Also test the final frozen cancellation boundary without Windows effects.
+        cancelled, rejected_deliveries = Event(), []
+
+        def cancelled_approval(preview):
+            cancelled.set()
+            return True
+
+        blocked = ToolExecutor(database, temporary, object(), cancelled_approval, rejected_deliveries.append)
+        try:
+            blocked.run({"tool": "clipboard_copy", "arguments": {"text": "Must not be delivered"}}, cancelled)
+        except ValueError:
+            pass
+        else:
+            raise ValueError("Packaged cancellation fixture did not stop execution.")
+        if rejected_deliveries:
+            raise ValueError("Packaged cancelled request delivered a clipboard result.")
         return {"result": "PASS", "backend_deliveries": 1, "real_clipboard_modified": False,
-                "os_effects_verified": False}
+                "cancelled_delivery_blocked": True, "os_effects_verified": False}
     finally:
         database.close()
 

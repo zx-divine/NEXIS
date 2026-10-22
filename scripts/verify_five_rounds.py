@@ -23,9 +23,11 @@ def fingerprint():
     paths = set()
     for directory in ("src", "tests", "scripts"):
         paths.update(path for path in (ROOT / directory).rglob("*") if path.suffix in {".py", ".qss"})
+    paths.update(path for path in (ROOT / "assets/licenses").rglob("*") if path.is_file())
     paths.update(ROOT / value for value in ("NEXIS.spec", "pyproject.toml", "requirements.txt",
         "requirements-dev.txt", "installer/NEXIS.iss", "scripts/version.txt", "assets/models/manifest.json",
-        "assets/branding/NEXIS_logo.png", "assets/branding/NEXIS.ico"))
+        "assets/branding/NEXIS_logo.png", "assets/branding/NEXIS.ico",
+        "assets/RELEASE_CHANNEL.txt", "LICENSE"))
     digest = hashlib.sha256()
     for path in sorted(paths):
         digest.update(path.relative_to(ROOT).as_posix().encode() + b"\0" + path.read_bytes())
@@ -35,6 +37,8 @@ def fingerprint():
 candidate = fingerprint()
 report = {"candidate_sha256": candidate, "independent_processes": True,
           "fresh_test_state_each_round": True, "rounds": [], "status": "RUNNING"}
+# Never leave a previous candidate's PASS visible while a new sequence starts.
+(OUTPUT / "results.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
 for number in range(1, 6):
     if fingerprint() != candidate:
         report["status"] = "SOURCE_CHANGED"
