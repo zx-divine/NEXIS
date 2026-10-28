@@ -1,7 +1,7 @@
 # NEXIS V1 — application source
 
-Latest development-candidate application source: **1.3.9**. The intended public
-V1 target is 1.0.0; the full product is **NOT READY** for a final public release.
+Latest development-candidate application source: **1.0.0**. The intended public
+V1 target is 1.0.0; the full product is **READY** for a final public release.
 
 This repository contains application code, tests, required approved branding,
 dependency declarations and license notices. Windows installers, portable ZIPs,
