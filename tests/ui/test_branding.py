@@ -18,8 +18,10 @@ def test_assets_are_preserved_and_cwd_independent(qapp, tmp_path, monkeypatch):
     assert not application_icon().isNull()
     data = asset("NEXIS.ico").read_bytes()
     reserved, kind, count = struct.unpack_from("<HHH", data)
-    assert (reserved, kind, count) == (0, 1, 7)
-    assert {data[6 + index * 16] or 256 for index in range(count)} == {16, 24, 32, 48, 64, 128, 256}
+    assert (reserved, kind, count) == (0, 1, 10)
+    assert {data[6 + index * 16] or 256 for index in range(count)} == {
+        16, 20, 24, 32, 40, 48, 64, 96, 128, 256
+    }
 
 
 def test_logo_surfaces_and_wizard_commits_only_on_finish(qtbot, db):
@@ -30,15 +32,18 @@ def test_logo_surfaces_and_wizard_commits_only_on_finish(qtbot, db):
     qtbot.addWidget(splash)
     assert not splash.pixmap().isNull()
     wizard = WelcomeWizard(db)
+    wizard.preferred_name.setText("Fixture user")
     qtbot.addWidget(wizard)
     wizard.history.setChecked(False)
     wizard.reject()
     assert db.setting("history_enabled")
     assert not db.setting("welcome_completed")
     wizard = WelcomeWizard(db)
+    wizard.preferred_name.setText("Fixture user")
     qtbot.addWidget(wizard)
     wizard.history.setChecked(False)
     wizard.motion.setChecked(True)
+    wizard.api_setup_choice.setCurrentIndex(wizard.api_setup_choice.findData('later'))
     wizard.accept()
     assert db.setting("welcome_completed")
     assert not db.setting("history_enabled")

@@ -10,7 +10,7 @@ APP_USER_MODEL_ID = "NEXIS.Desktop"
 
 
 def asset(name):
-    if name not in {"NEXIS_logo.png", "NEXIS.ico"}:
+    if name not in {"NEXIS_logo.png", "NEXIS_symbol.png", "NEXIS.ico"}:
         raise ValueError("Unknown branding asset")
     return Path(__file__).resolve().parent / "assets" / "branding" / name
 

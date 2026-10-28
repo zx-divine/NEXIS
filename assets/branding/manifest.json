@@ -1,0 +1,56 @@
+{
+  "source": "NEXIS LOGO.png",
+  "source_sha256": "cee617446391da8bf0f3d348f96e0f629e11aa8c9dc9e30356c577d721794b4c",
+  "symbol_crop": [
+    265,
+    155,
+    995,
+    855
+  ],
+  "icon_sizes": [
+    16,
+    20,
+    24,
+    32,
+    40,
+    48,
+    64,
+    96,
+    128,
+    256
+  ],
+  "assets": [
+    {
+      "file": "NEXIS LOGO.png",
+      "role": "approved original, unchanged",
+      "sha256": "cee617446391da8bf0f3d348f96e0f629e11aa8c9dc9e30356c577d721794b4c",
+      "pixels": [
+        1254,
+        1254
+      ]
+    },
+    {
+      "file": "NEXIS_logo.png",
+      "role": "runtime full artwork, byte-identical",
+      "sha256": "cee617446391da8bf0f3d348f96e0f629e11aa8c9dc9e30356c577d721794b4c",
+      "pixels": [
+        1254,
+        1254
+      ]
+    },
+    {
+      "file": "NEXIS_symbol.png",
+      "role": "runtime N symbol",
+      "sha256": "af26a1961fd1cf61d8b0c0280227931f233b5cfb7e9e06496986b144b045e309",
+      "pixels": [
+        512,
+        512
+      ]
+    },
+    {
+      "file": "NEXIS.ico",
+      "role": "Windows multi-resolution N symbol",
+      "sha256": "18cc9b24a9590e614766f5afd58e7bc224bea395bc98bf4a3f3abf706f12b75f"
+    }
+  ]
+}

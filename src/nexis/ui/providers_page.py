@@ -170,7 +170,9 @@ class AIProvidersPage(QWidget):
         self.model.clear()
         self.protocol.setCurrentText("gemini" if provider == "Google Gemini" else "openai")
         self.native_tools.setChecked(provider == "Google Gemini")
-        self.auth.setCurrentText("api-key" if provider == "Google Gemini" else "Bearer")
+        self.auth.setCurrentText("api-key" if provider == "Google Gemini" else "None" if provider == "Ollama" else "Bearer")
+        if provider == "Ollama":
+            self.status.setText("Connect to your installed Ollama server. Refresh models or enter an installed model ID. No server or model is installed or started automatically. Some Ollama models route to cloud services; choose and verify a local model before relying on offline use.")
         if provider in {"OpenAI-compatible", "Custom API Gateway", "Compatible gateway"}:
             self.advanced.setChecked(True)
 

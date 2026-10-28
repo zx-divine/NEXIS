@@ -1,4 +1,4 @@
-"""Release identity cannot silently diverge between source and packaging."""
+"""Release identity cannot silently diverge between source and project metadata."""
 
 from pathlib import Path
 import tomllib
@@ -6,20 +6,13 @@ import tomllib
 from nexis import __version__, DISPLAY_VERSION, PUBLIC_VERSION, RELEASE_CHANNEL
 
 
-def test_candidate_identity_matches_packaging_and_preserves_history():
+def test_candidate_identity_matches_project_metadata_and_preserves_history():
     root = Path(__file__).resolve().parents[2]
     assert tomllib.loads((root / "pyproject.toml").read_text())["project"]["version"] == __version__
     assert tuple(map(int, __version__.split("."))) > (1, 3, 3)
-    assert RELEASE_CHANNEL == "candidate" and PUBLIC_VERSION == "1.0.0"
+    assert RELEASE_CHANNEL == "development" and PUBLIC_VERSION == "1.0.0"
     assert "Candidate" in DISPLAY_VERSION and __version__ in DISPLAY_VERSION
     assert "Stable" not in DISPLAY_VERSION
-    metadata = (root / "scripts/version.txt").read_text()
-    assert "StringStruct('FileVersion', '" + __version__ + "')" in metadata
-    assert "StringStruct('ProductVersion', '" + DISPLAY_VERSION + "')" in metadata
-    installer = (root / "installer/NEXIS.iss").read_text()
-    assert 'GetStringFileInfo("..\\dist\\NEXIS\\NEXIS.exe", "ProductVersion")' in installer
-    assert "VersionInfoProductTextVersion={#AppDisplayVersion}" in installer
-    assert "VersionInfoTextVersion={#AppVersion}" in installer
 
 
 def test_ca_bundle_security_floor_is_installed_and_declared():

@@ -9,5 +9,8 @@ def parse(text: str) -> Request:
         raise ValueError("Control characters are not allowed.")
     if text.lower() == "clear history":
         return Request("clear_history")
+    from nexis.core.intents import local_command
+
+    text = local_command(text) or text
     action, _, argument = text.partition(" ")
     return Request(action.lower(), argument.strip())

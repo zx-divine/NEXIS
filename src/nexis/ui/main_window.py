@@ -8,7 +8,6 @@ from PySide6.QtCore import QEvent, QTimer, Qt
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
-    QComboBox,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -49,6 +48,8 @@ from nexis.ui.workflow_studio import WorkflowStudio
 from nexis.ui.screen_page import ScreenPage
 from nexis.ui.desktop_page import DesktopPage
 from nexis.ui.updates_page import UpdatesPage
+from nexis.ui.doctor_page import DoctorPage
+from nexis.ui.launch_page import ModuleNavigation, WelcomePage
 
 
 class MainWindow(QMainWindow):
@@ -62,13 +63,15 @@ class MainWindow(QMainWindow):
         self.current_ai = None
         self.conversation_history = []
         self.closing = False
+        self.microphone_muted = db.setting("microphone_muted")
+        self.global_launcher = None
         self.platform = platform or Windows()
         self.sampler = sampler or SystemSampler()
         self.repo = Repository(db)
         self.worker = None
         self.origin = "manual"
         self.assistant_state = ReactorState.IDLE
-        self.setWindowTitle("NEXIS Desktop " + DISPLAY_VERSION + " — CRIMSON COMMAND")
+        self.setWindowTitle("NEXIS")
         self.resize(1366, 768)
         self.setMinimumSize(820, 600)
         central = QWidget()
@@ -78,11 +81,12 @@ class MainWindow(QMainWindow):
         root.setSpacing(9)
         self.build_header(root)
         nav = QHBoxLayout()
-        nav.addWidget(self.small_label("MODULE ACCESS  //"))
-        self.navigation = QComboBox()
+        self.tools_button = button("Tools", self.toggle_tools, nav)
+        self.tools_button.setCheckable(True)
+        self.navigation = ModuleNavigation()
         self.navigation.setAccessibleName("Module navigation")
-        self.navigation.setMinimumWidth(190)
-        nav.addWidget(self.navigation)
+        self.navigation.setFixedWidth(190)
+        self.navigation.hide()
         nav.addStretch()
         self.nav_hint = self.small_label(
             "ONLINE AI   /   YOUR SELECTED PROVIDER   /   PERMISSIONS ENFORCED"
@@ -90,17 +94,25 @@ class MainWindow(QMainWindow):
         nav.addWidget(self.nav_hint)
         self.mute_button = button("Hard mute / sleep", self.toggle_microphone_mute, nav)
         self.mute_button.setAccessibleName("Hard mute or wake microphone; Ctrl Shift M")
-        self.mute_button.setToolTip("Stops this application's microphone, speech and queued actions. Wake enables Talk but never records automatically.")
+        self.mute_button.setToolTip("Stops microphone capture, speech and queued actions. Wake resumes opted-in Hey NEXIS listening, or enables explicit Talk when wake listening is off.")
         self.update_mute_label()
-        button("Full screen · F11", self.toggle_fullscreen, nav)
         root.addLayout(nav)
         self.stack = QStackedWidget()
-        root.addWidget(self.stack, 1)
+        workspace = QHBoxLayout()
+        workspace.addWidget(self.navigation)
+        workspace.addWidget(self.stack, 1)
+        root.addLayout(workspace, 1)
         self.pages = {}
         self.build_dashboard()
+        self.welcome = WelcomePage(self)
+        self.add_page("Welcome", self.welcome)
         self.chat = ChatPage(self)
         self.chat.request.connect(lambda text: self.conversation_request(text, "chat"))
         self.add_page("Chat", self.chat)
+        from nexis.ui.saved_conversations import SavedConversationsPage
+
+        self.saved_conversations = SavedConversationsPage(self)
+        self.add_page("Saved Conversations", self.saved_conversations)
         self.voice = VoicePage(self)
         self.voice.request.connect(lambda text: self.conversation_request(text, "voice"))
         self.voice.state.connect(self.voice_state)
@@ -159,6 +171,8 @@ class MainWindow(QMainWindow):
         self.add_page("Desktop Companion", self.desktop_experience)
         self.updates_page = UpdatesPage(self)
         self.add_page("Updates", self.updates_page)
+        self.doctor = DoctorPage(self)
+        self.add_page("NEXIS Doctor", self.doctor)
         about = QWidget()
         layout = QVBoxLayout(about)
         layout.addWidget(BrandLogo(128))
@@ -168,11 +182,13 @@ class MainWindow(QMainWindow):
         info = QLabel(
             "Crimson Command HUD with online AI, permission-controlled Windows tools and manual commands.\n"
             "Vosk capture is local and explicitly activated. Windows speech is detected automatically.\n"
-            "Personal data is unencrypted under your Windows account. Licence decision pending.\n"
+            "Created by ASH. Personal data is local under your Windows account; provider keys use Windows DPAPI. Proprietary — All Rights Reserved. EULA draft awaiting review.\n"
+            "Project: https://github.com/zx-divine/nexis\n"
             "Ctrl+K: manual drawer · Ctrl+2: Chat · Ctrl+3: Voice · F11: full screen · Esc: exit/stop/collapse"
         )
         info.setWordWrap(True)
         layout.addWidget(info)
+        button("Open GitHub project", lambda: self.submit("open https://github.com/zx-divine/nexis"), layout)
         self.diagnostics = QPlainTextEdit()
         self.diagnostics.setReadOnly(True)
         layout.addWidget(self.diagnostics)
@@ -198,6 +214,9 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence("F11"), self, activated=self.toggle_fullscreen)
         QShortcut(QKeySequence("Escape"), self, activated=self.escape_action)
         QShortcut(QKeySequence("Ctrl+Shift+M"), self, activated=self.toggle_microphone_mute)
+        QShortcut(QKeySequence("Ctrl+,"), self, activated=self.open_settings)
+        self.show_launch_mode()
+        self.set_state("IDLE")
 
     @staticmethod
     def small_label(text):
@@ -206,12 +225,23 @@ class MainWindow(QMainWindow):
         return label
 
     def build_header(self, root):
-        panel = HUDPanel("NEXIS DESKTOP   /   CRIMSON COMMAND", DISPLAY_VERSION)
+        panel = QWidget()
+        panel.setObjectName("appHeader")
         row = QHBoxLayout()
-        brand = QLabel("N E X I S")
+        row.setContentsMargins(8, 4, 8, 4)
+        row.addWidget(BrandLogo(40, symbol=True))
+        brand = QLabel("NEXIS")
         brand.setObjectName("brand")
         row.addWidget(brand)
         row.addStretch()
+        self.mode_switches = {}
+        for label, target in (("Home", "Welcome"), ("Voice", "Voice Chat"), ("Chat", "Chat"), ("Manual", "Dashboard")):
+            control = button(label, lambda checked=False, page=target: self.switch_mode(page), row)
+            control.setCheckable(True)
+            control.setAccessibleName(label + " mode")
+            self.mode_switches[target] = control
+        self.always_active_button = button('Always Active', lambda: self.navigate('Desktop Companion'), row)
+        self.always_active_button.setAccessibleName('Always Active settings and wake listening status')
         self.system_readout = self.small_label("CPU  N/A    MEM  N/A")
         row.addWidget(self.system_readout)
         self.clock = self.small_label(datetime.now().strftime("%H:%M:%S"))
@@ -219,11 +249,25 @@ class MainWindow(QMainWindow):
         row.addWidget(self.clock)
         self.header_state = self.small_label("●  IDLE")
         row.addWidget(self.header_state)
-        button("—", self.showMinimized, row).setToolTip("Minimise window")
-        button("□", self.toggle_maximized, row).setToolTip("Maximise or restore window")
-        button("×", self.close, row).setToolTip("Close NEXIS")
-        panel.body.addLayout(row)
+        self.settings_button = button("⚙", self.open_settings, row)
+        self.settings_button.setAccessibleName("Open Settings Hub")
+        self.settings_button.setToolTip("Settings Hub · Ctrl+,")
+        panel.setLayout(row)
         root.addWidget(panel)
+
+    def toggle_tools(self):
+        opened = not self.navigation.isVisible()
+        self.navigation.setVisible(opened)
+        self.tools_button.setChecked(opened)
+        if opened:
+            self.navigation.setFocus()
+
+    def switch_mode(self, page):
+        self.focus_command() if page == "Dashboard" else self.navigate(page)
+
+    def show_launch_mode(self):
+        mode = self.db.setting("default_launch_mode")
+        self.switch_mode({"welcome": "Welcome", "voice": "Voice Chat", "chat": "Chat", "manual": "Dashboard"}[mode])
 
     def build_dashboard(self):
         dashboard = QWidget()
@@ -349,12 +393,14 @@ class MainWindow(QMainWindow):
             self.deck.manual,
         )
         root.addWidget(self.deck)
-        foot = QHBoxLayout()
-        foot.addWidget(self.small_label("NEXIS " + DISPLAY_VERSION + "  //  LOCAL AUTHORITY"))
+        self.footer = QWidget()
+        foot = QHBoxLayout(self.footer)
+        foot.setContentsMargins(0, 0, 0, 0)
+        foot.addWidget(self.small_label("NEXIS V1  ·  YOUR PERMISSIONS, YOUR CONTROL"))
         foot.addStretch()
         self.motion_label = self.small_label("IDLE MOTION 8 FPS / ACTIVE TARGET 30 FPS")
         foot.addWidget(self.motion_label)
-        root.addLayout(foot)
+        root.addWidget(self.footer)
 
     def add_page(self, label, widget):
         scroll = QScrollArea()
@@ -388,6 +434,14 @@ class MainWindow(QMainWindow):
         blocked = self.navigation.blockSignals(True)
         self.navigation.setCurrentText(label)
         self.navigation.blockSignals(blocked)
+        for page, control in self.mode_switches.items():
+            control.setChecked(label == page)
+        if hasattr(self, "deck"):
+            self.deck.setVisible(label == "Dashboard")
+            self.footer.setVisible(label != "Welcome")
+        self.tools_button.setVisible(label != "Welcome")
+        self.mute_button.setVisible(label != "Welcome" or self.db.setting('wake_word_enabled'))
+        self.nav_hint.setVisible(label != "Welcome" and self.width() >= 1150)
         if label == "Chat":
             self.chat.input.setFocus()
         if hasattr(self, "deck"):
@@ -395,6 +449,10 @@ class MainWindow(QMainWindow):
             self.voice_button.setChecked(label == "Voice Chat")
             self.manual_button.setChecked(label == "Dashboard" and self.drawer.isVisible())
         self.responsive_layout()
+
+    def open_settings(self, section="General"):
+        self.navigate("Settings")
+        self.settings_page.open_section(section if isinstance(section, str) else "General")
 
     def toggle_manual(self):
         visible = self.drawer.isVisible() and self.stack.currentIndex() == self.pages["Dashboard"]
@@ -413,13 +471,38 @@ class MainWindow(QMainWindow):
         self.toggle_drawer(True)
         self.command.setFocus()
 
+    def configure_launcher(self):
+        from nexis.ui.global_launcher import GlobalLauncher
+
+        if self.global_launcher is None:
+            self.global_launcher = GlobalLauncher(self.launch_command_bar)
+        result = self.global_launcher.configure(self.db.setting("global_launcher_hotkey"), self.db.setting("global_launcher_enabled"))
+        self.settings_page.launcher_status.setText(result.message)
+        if result.active_chord and result.active_chord != self.db.setting("global_launcher_hotkey"):
+            self.settings_page.launcher_status.setText(result.message + " Current active shortcut: " + result.active_chord)
+        return result
+
+    def launch_command_bar(self):
+        if self.closing:
+            return
+        self.showNormal() if self.isMinimized() or not self.isVisible() else None
+        self.raise_()
+        self.activateWindow()
+        self.focus_command()
+
     def responsive_layout(self):
         if not hasattr(self, "drawer"):
             return
         wings = self.width() >= 1100 and not (self.drawer.isVisible() and self.height() < 950)
         self.left_wing.setVisible(wings)
         self.right_wing.setVisible(wings)
-        self.nav_hint.setVisible(self.width() >= 1150)
+        is_welcome = self.stack.currentIndex() == self.pages.get("Welcome", -1)
+        self.nav_hint.setVisible(not is_welcome and self.width() >= 1150)
+        self.system_readout.setVisible(self.width() >= 1100 and not is_welcome)
+        self.clock.setVisible(self.width() >= 1100 and not is_welcome)
+        if is_welcome:
+            self.navigation.hide()
+            self.tools_button.setChecked(False)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -446,16 +529,17 @@ class MainWindow(QMainWindow):
         else:
             self.navigate("Dashboard")
 
-    def apply_theme(self):
-        qss = Path(__file__).with_name("theme.qss").read_text(encoding="utf-8")
-        if self.db.setting("theme") == "light":
-            qss += (
-                "\nQWidget#contentPage, QWidget#contentPage QWidget { background: #F4E9E5; color: #240C12; }\n"
-                "QWidget#contentPage QPushButton, QWidget#contentPage QLineEdit { border-color: #8B0000; }"
-            )
-        self.setStyleSheet(qss)
+    def apply_theme(self, selected=None, custom=None):
+        from nexis.ui.themes import apply
+
+        if selected is not None:
+            values = self.db.setting("custom_theme") if custom is None else custom
+            apply(selected, values)
+            self._theme_preview = (selected, values)
+        else:
+            apply(*getattr(self, "_theme_preview", (self.db.setting("theme"), self.db.setting("custom_theme"))))
         reduced, fps = self.db.setting("reduced_motion"), self.db.setting("animation_fps")
-        for reactor in (self.reactor, self.voice.reactor):
+        for reactor in (self.reactor, self.voice.reactor, self.welcome.reactor):
             reactor.set_reduced_motion(reduced)
             reactor.set_fps(fps)
         self.deck.set_reduced_motion(reduced)
@@ -499,7 +583,7 @@ class MainWindow(QMainWindow):
     def suspend_visuals(self, paused):
         if not hasattr(self, "sensor_timer"):
             return
-        for reactor in (self.reactor, self.voice.reactor):
+        for reactor in (self.reactor, self.voice.reactor, self.welcome.reactor):
             reactor.set_paused(paused)
         self.radar.paused = paused
         self.radar.sync_timer()
@@ -531,9 +615,13 @@ class MainWindow(QMainWindow):
                 self.voice.stop()
                 self.settings_page.voice_setup.microphone.stop()
                 self.screen_awareness.discard()
+                if self.db.setting("minimize_to_tray") and hasattr(self, "desktop_experience"):
+                    QTimer.singleShot(0, self.desktop_experience.collapse)
             self.suspend_visuals(self.isMinimized())
 
     def set_state(self, state):
+        if self.closing:
+            return
         if state == "PAUSED":
             self.assistant_state = ReactorState.IDLE
             self.reactor.set_state(ReactorState.IDLE)
@@ -542,8 +630,13 @@ class MainWindow(QMainWindow):
         state = {"THINKING": "PROCESSING", "TRANSCRIBING": "PROCESSING", "CANCELLED": "IDLE"}.get(
             state, state
         )
+        if state == "IDLE" and self.microphone_muted:
+            state = "MUTED"
         self.assistant_state = ReactorState(state)
         self.reactor.set_state(self.assistant_state)
+        self.welcome.reactor.set_state(self.assistant_state)
+        if self.assistant_state in {ReactorState.WAITING_PERMISSION, ReactorState.MUTED, ReactorState.OFFLINE}:
+            self.voice.reactor.set_state(self.assistant_state)
         self.header_state.setText("●  " + self.assistant_state.value)
 
     def voice_state(self, state):
@@ -551,7 +644,7 @@ class MainWindow(QMainWindow):
             self.set_state(state)
 
     def settle_state(self):
-        if not (self.worker and self.worker.isRunning()):
+        if not self.closing and not (self.worker and self.worker.isRunning()):
             self.set_state(ReactorState.IDLE)
 
     def selected_profile(self):
@@ -572,9 +665,29 @@ class MainWindow(QMainWindow):
             return
         if origin == "chat":
             self.chat.pending_prompt = text
-        memory_request = re.fullmatch(r"(remember|forget) this(?::\s*|\s+)(.+)", text, re.IGNORECASE | re.DOTALL)
+        if text.casefold().strip(' .!?') in {'what is my name', "what's my name", 'what should you call me'}:
+            name = self.db.setting('preferred_name')
+            self.ai_reply(f"I'll call you {name}." if name else 'Tell me your preferred name in Settings > General.', origin)
+            return
+        # A single website request can work without a paid/cloud planner. The
+        # normal Engine still validates permissions, approval and cancellation.
+        from nexis.core.websites import website_command
+        from nexis.core.intents import local_command
+
+        try:
+            local_website = website_command(text) or local_command(text)
+        except ValueError as exc:
+            self.local_page_reply(str(exc), origin)
+            return
+        if local_website:
+            if origin == "voice":
+                self.voice.thinking()
+            self.submit(local_website, origin)
+            return
+        memory_request = re.fullmatch(r"(remember|forget)(?:\s+this)?(?::\s*|\s+)(.+)", text, re.IGNORECASE | re.DOTALL)
+        memory_review = text.strip().casefold().rstrip(".?!") in {"show my saved memories", "show my memories", "review my memories"}
         screen_request = text.strip().casefold().rstrip(".?!") in {"explain this error on my screen", "explain my screen", "analyze my screen"}
-        local_only = bool(memory_request or screen_request)
+        local_only = bool(memory_request or memory_review or screen_request)
         if not local_only and (not self.conversation_history or self.conversation_history[-1] != {
             "role": "user",
             "content": text[:1000],
@@ -583,6 +696,10 @@ class MainWindow(QMainWindow):
         self.conversation_history = self.conversation_history[-24:]
         if origin == "voice":
             self.voice.thinking()
+        if memory_review:
+            self.navigate("Local Memory")
+            self.local_page_reply("Your saved memories are available locally for review. Nothing was sent to AI.", origin)
+            return
         if screen_request:
             self.screen_awareness.question.setText(text[:1000])
             self.navigate("Screen Awareness")
@@ -637,6 +754,8 @@ class MainWindow(QMainWindow):
         else:
             self.chat.finish_stream(completed=False)
             self.chat.add_message("NEXIS", text)
+        if str(text).startswith(("CONNECTION:", "DNS:", "NETWORK:")):
+            self.set_state("OFFLINE")
 
     def ai_partial(self, text, origin):
         if origin == "chat":
@@ -676,6 +795,7 @@ class MainWindow(QMainWindow):
     def start_services(self):
         if self.closing:
             return
+        self.configure_launcher()
         path = detect_model(self.db.setting("voice_model_path"), self.data_dir)
         if path:
             self.db.set_setting("voice_model_path", path)
@@ -706,7 +826,9 @@ class MainWindow(QMainWindow):
             *self.workflow_studio.jobs,
             *self.screen_awareness.jobs,
             *self.updates_page.jobs,
+            *self.doctor.jobs,
             self.voice.worker,
+            *self.desktop_experience.wake.jobs,
             *self.ai_jobs,
             *self.discovery.jobs,
             *setup.provider.jobs,
@@ -716,7 +838,13 @@ class MainWindow(QMainWindow):
         ]
 
     def update_mute_label(self):
+        self.microphone_muted = self.db.setting("microphone_muted")
         self.mute_button.setText("Wake / enable microphone" if self.db.setting("microphone_muted") else "Hard mute / sleep")
+        if hasattr(self, "welcome"):
+            self.set_state("IDLE")
+            self.voice.reactor.set_state(self.assistant_state)
+        if hasattr(self, "desktop_experience") and self.desktop_experience.orb:
+            self.desktop_experience.orb.set_state(self.assistant_state.value)
 
     def toggle_microphone_mute(self):
         self.set_microphone_muted(not self.db.setting("microphone_muted"))
@@ -724,6 +852,7 @@ class MainWindow(QMainWindow):
     def set_microphone_muted(self, muted):
         # Cancel first: persisting a preference must not delay a capture-stop request.
         if muted:
+            self.desktop_experience.wake.pause()
             self.voice.stop()
             self.settings_page.voice_setup.microphone.stop()
             self.stop_command()
@@ -734,15 +863,19 @@ class MainWindow(QMainWindow):
             self.workflow_studio.cancel()
             self.screen_awareness.discard()
             self.updates_page.cancel()
+            self.doctor.cancel()
+            self.settings_page.voice_setup.stop_speech()
             dialogs.reject_pending(self)
         self.db.set_setting("microphone_muted", bool(muted))
         self.update_mute_label()
         self.voice.status.setText(
             "Hard mute / sleep: capture and speech stopped; queued actions cancelled. Wake requires an explicit click."
-            if muted else "Awake. Microphone remains OFF until you press Talk or start an explicit Settings test."
+            if muted else "Awake. Your opted-in Hey NEXIS listener may resume; otherwise microphone stays off until Talk."
         )
+        self.desktop_experience.wake.refresh()
 
     def submit(self, text=None, origin="manual"):
+        self.desktop_experience.wake.pause()
         if any(job.isRunning() for job in self.ai_jobs):
             message = "An AI request is still running. Cancel it or wait before starting a manual action; no command was executed."
             self.output.appendPlainText(message)
@@ -798,7 +931,8 @@ class MainWindow(QMainWindow):
         for resource in [*self.resources, self.settings_page]:
             resource.setEnabled(False)
         self.radar.add_event()
-        self.worker = CommandWorker(self.db, text, self.platform)
+        self.worker = CommandWorker(self.db, text, self.platform,
+                                    allow_radio=origin != "voice" or getattr(self.voice, "radio_reviewed", False))
         self.pause_workflow_button.setText("Pause workflow")
         self.pause_workflow_button.setEnabled(text.lower().startswith("run "))
         self.worker.permission.connect(self.permission)
@@ -816,6 +950,7 @@ class MainWindow(QMainWindow):
                 worker.respond(False)
             return
         self._approval_cancel = worker.cancel
+        self.set_state("WAITING_PERMISSION")
         try:
             allowed = dialogs.confirm(self, preview)
         finally:
@@ -824,8 +959,11 @@ class MainWindow(QMainWindow):
             "PERMISSIONS / APPROVED" if allowed else "PERMISSIONS / DENIED"
         )
         worker.respond(allowed and not worker.cancel.is_set())
+        self.set_state("PROCESSING" if allowed and not worker.cancel.is_set() else "IDLE")
 
     def apply_payload(self, result):
+        if self.closing or (self.worker and self.worker.cancel.is_set()):
+            return
         if result.ok and "clipboard" in result.data:
             QApplication.clipboard().setText(result.data["clipboard"])
             result.message = result.message.replace("ready for clipboard", "copied to clipboard")
@@ -854,11 +992,10 @@ class MainWindow(QMainWindow):
         if self.origin == "chat":
             self.chat.add_message("NEXIS", result.message)
         elif self.origin == "voice":
-            self.voice.response.setPlainText(result.message)
-            self.voice.reactor.set_state(ReactorState.SUCCESS if result.ok else ReactorState.ERROR)
-            speech = self.settings_page.voice_setup.speech
-            if self.db.setting("tts_enabled") and speech and speech.isRunning():
-                speech.say(result.message)
+            if not self.closing and not (self.worker and self.worker.cancel.is_set()):
+                self.voice.receive_reply(result.message)
+            else:
+                self.voice.response.setPlainText("Command cancelled. Already-submitted Windows requests cannot be recalled.")
         self.refresh()
         self.settle_timer.start(2200)
 
@@ -891,6 +1028,7 @@ class MainWindow(QMainWindow):
                 self.output.appendPlainText("Pause requested at the next step boundary. An action already submitted to Windows is not undone.")
 
     def refresh(self):
+        self.welcome.refresh()
         for page in self.resources:
             page.refresh()
         self.history_page.refresh()
@@ -947,6 +1085,12 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         self.closing = True
+        self.desktop_experience.wake.stop()
+        if self.global_launcher:
+            self.global_launcher.stop()
+        self.voice.stop()
+        self.settings_page.voice_setup.stop_speech()
+        self.settings_page.voice_setup.microphone.stop()
         workers = [w for w in self.background_jobs() if w and w.isRunning()]
         if workers:
             for worker in workers:

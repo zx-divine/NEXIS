@@ -5,13 +5,20 @@ from datetime import datetime, timezone
 from pathlib import Path
 from threading import RLock
 from nexis.core.access import DEFAULT_GRANTS, CATEGORIES
+from nexis.core.themes import THEMES, CUSTOM_DEFAULT, theme_id, validate_custom
 
 
 DEFAULTS = {
     "welcome_completed": False,
-    "theme": "dark",
+    "preferred_name": "",
+    "default_launch_mode": "welcome",
+    "global_launcher_enabled": True,
+    "global_launcher_hotkey": "Ctrl+Space",
+    "theme": "og",
+    "custom_theme": CUSTOM_DEFAULT,
     "start_minimised": False,
     "history_enabled": True,
+    "memory_enabled": True,
     "history_limit": 500,
     "search_roots": [],
     "confirm_low_risk": False,
@@ -26,10 +33,15 @@ DEFAULTS = {
     "audio_input": "",
     "microphone_muted": False,
     "voice_hands_free": False,
+    "wake_word_enabled": False,
+    "wake_word_confidence": 85,
+    "ai_setup_choice": "unreviewed",
     "workflow_drafting_enabled": False,
     "screen_awareness_enabled": False,
     "floating_orb_enabled": False,
+    "minimize_to_tray": False,
     "orb_position": [],
+    "orb_always_on_top": True,
     "update_checks_enabled": False,
     "update_last_check": "",
     "mic_sensitivity": 100,
@@ -46,6 +58,23 @@ SITES = {
     "github": "https://github.com",
     "chatgpt": "https://chatgpt.com",
 }
+
+
+def read_appearance(path):
+    """Read only appearance for an independent diagnostic window; never migrate/write."""
+    from contextlib import closing
+    if not path.is_file():
+        return "og", dict(CUSTOM_DEFAULT)
+    try:
+        with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=.2)) as connection:
+            rows = dict(connection.execute("SELECT key,value FROM settings WHERE key IN ('theme','custom_theme')"))
+        selected = theme_id(json.loads(rows.get("theme", '"og"')))
+        custom = validate_custom(json.loads(rows.get("custom_theme", json.dumps(CUSTOM_DEFAULT))))
+        if selected not in THEMES:
+            raise ValueError("Invalid saved appearance")
+        return selected, custom
+    except (ValueError, TypeError, OSError, sqlite3.Error):
+        return "og", dict(CUSTOM_DEFAULT)
 
 
 class StorageError(RuntimeError):
@@ -66,7 +95,7 @@ class Database:
                         "Database integrity check failed; preserve the file for recovery."
                     )
                 version = self.connection.execute("PRAGMA user_version").fetchone()[0]
-                if version > 4:
+                if version > 5:
                     raise StorageError("This database requires a newer NEXIS version.")
                 if version == 0:
                     self.connection.executescript("""
@@ -111,7 +140,9 @@ class Database:
                 self.connection.execute(
                     "CREATE TABLE IF NOT EXISTS document_index (path TEXT PRIMARY KEY, bytes INTEGER NOT NULL, modified_ns INTEGER NOT NULL, body TEXT NOT NULL)"
                 )
-                self.connection.execute("PRAGMA user_version=4")
+                self.connection.execute("CREATE TABLE IF NOT EXISTS conversations (id TEXT PRIMARY KEY, title TEXT NOT NULL, messages TEXT NOT NULL, updated_at TEXT NOT NULL)")
+                self.connection.execute("CREATE INDEX IF NOT EXISTS conversations_updated ON conversations(updated_at)")
+                self.connection.execute("PRAGMA user_version=5")
         except StorageError:
             self.connection.close()
             raise
@@ -135,9 +166,25 @@ class Database:
         rows = self.rows("SELECT value FROM settings WHERE key=?", (key,))
         try:
             value = json.loads(rows[0]["value"]) if rows else DEFAULTS[key]
-            default = DEFAULTS[key]
+            default = json.loads(json.dumps(DEFAULTS[key]))
             if type(value) is not type(default):
                 return default
+            if key == "preferred_name" and value:
+                from nexis.core.profile import preferred_name
+
+                return preferred_name(value)
+            if key == "default_launch_mode":
+                from nexis.core.profile import LAUNCH_MODES
+
+                return value if value in LAUNCH_MODES else default
+            if key == "wake_word_confidence":
+                return value if 50 <= value <= 95 else default
+            if key == "ai_setup_choice":
+                return value if value in {"unreviewed", "configured", "later"} else default
+            if key == "global_launcher_hotkey":
+                from nexis.platform.hotkeys import HOTKEYS
+
+                return value if value in HOTKEYS else default
             if key == "history_limit" and not 1 <= value <= 10000:
                 return default
             if key == "animation_fps" and not 10 <= value <= 30:
@@ -148,8 +195,10 @@ class Database:
                 return default
             if key == "mic_noise_floor" and (not math.isfinite(value) or not 0.00001 <= value <= 0.25):
                 return default
-            if key == "theme" and value not in ("dark", "light"):
+            if key == "theme" and theme_id(value) not in THEMES:
                 return default
+            if key == "custom_theme":
+                return validate_custom(value)
             if key == "search_roots" and not all(isinstance(x, str) for x in value):
                 return []
             if key == "access_permissions":
@@ -162,15 +211,31 @@ class Database:
                 return json.loads(json.dumps(value))
             return value
         except (ValueError, TypeError):
-            return DEFAULTS[key]
+            return json.loads(json.dumps(DEFAULTS[key]))
 
     def set_setting(self, key, value):
         if key not in DEFAULTS or type(value) is not type(DEFAULTS[key]):
             raise ValueError("Invalid setting.")
+        if key == "preferred_name":
+            from nexis.core.profile import preferred_name
+
+            value = preferred_name(value)
+        if key == "default_launch_mode":
+            from nexis.core.profile import LAUNCH_MODES
+
+            if value not in LAUNCH_MODES:
+                raise ValueError("Choose Welcome, Voice, Chat or Manual mode.")
+        if key == "global_launcher_hotkey":
+            from nexis.platform.hotkeys import HOTKEYS
+
+            if value not in HOTKEYS:
+                raise ValueError("Choose a supported launcher shortcut.")
         if key == "history_limit" and not 1 <= value <= 10000:
             raise ValueError("History limit must be 1–10000.")
-        if key == "theme" and value not in ("dark", "light"):
-            raise ValueError("Choose dark or light theme.")
+        if key == "theme" and theme_id(value) not in THEMES:
+            raise ValueError("Choose a built-in or custom theme.")
+        if key == "custom_theme":
+            value = validate_custom(value)
         if key == "animation_fps" and not 10 <= value <= 30:
             raise ValueError("Animation FPS must be 10–30.")
         if key == "access_permissions" and (
@@ -194,6 +259,14 @@ class Database:
             value = [str(approved_root(p)) for p in value]
         self.execute("INSERT OR REPLACE INTO settings VALUES (?,?)", (key, json.dumps(value)))
         self.prune()
+
+    def set_appearance(self, selected, custom):
+        if selected not in THEMES:
+            raise ValueError("Choose an appearance theme.")
+        custom = validate_custom(custom)
+        with self.lock, self.connection:
+            self.connection.executemany("INSERT OR REPLACE INTO settings VALUES (?,?)",
+                                        (("theme", json.dumps(selected)), ("custom_theme", json.dumps(custom))))
 
     def prune(self):
         self.execute(
@@ -224,7 +297,7 @@ class Database:
             "settings": {k: self.setting(k) for k in DEFAULTS},
             **{
                 table: self.rows("SELECT * FROM " + table)
-                for table in ("snippets", "shortcuts", "workflows", "history")
+                for table in ("snippets", "shortcuts", "workflows", "history", "conversations")
             },
         }
 
@@ -242,6 +315,7 @@ class Database:
                 "tool_audit",
                 "local_memories",
                 "document_index",
+                "conversations",
             ):
                 self.connection.execute("DELETE FROM " + table)
             for key, value in DEFAULTS.items():

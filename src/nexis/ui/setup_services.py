@@ -194,7 +194,7 @@ class VoiceSetupPanel(QGroupBox):
         self.speech = None
         layout = QVBoxLayout(self)
         self.status = QLabel(
-            "Microphone stays off until Push to talk. Windows' default microphone and speaker are used automatically. Enable microphone access for desktop apps in Windows privacy settings if Windows denies access."
+            "Talk/tests use the selected microphone explicitly. Optional local Hey NEXIS listening is managed in Always Active and requires a separate opt-in. Windows' default microphone and speaker are used when no device is selected. If Windows denies access, review its desktop microphone permissions."
         )
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
@@ -400,6 +400,8 @@ def start_chat(window, text, origin):
     import os
     from nexis.core.operator import OperatorWorker
 
+    window.desktop_experience.wake.pause()
+
     if any(job.isRunning() for job in window.ai_jobs) or (window.worker and window.worker.isRunning()):
         window.ai_error(
             "An AI request or manual action is already running. Wait or cancel it; your prompt is retained.",
@@ -408,7 +410,8 @@ def start_chat(window, text, origin):
         return
     context = {"current_nexis_window_id": int(window.winId()), "current_nexis_pid": os.getpid()}
     job = OperatorWorker(
-        window.db, window.data_dir, text, window.platform, context, window.conversation_history[:-1]
+        window.db, window.data_dir, text, window.platform, context, window.conversation_history[:-1],
+        allow_radio=origin != "voice" or getattr(window.voice, "radio_reviewed", False),
     )
     window.ai_origin = origin
     window.current_ai = job
@@ -427,6 +430,7 @@ def start_chat(window, text, origin):
 
     def confirm(preview):
         window.permission_status.setText("PERMISSIONS / AWAITING REVIEW")
+        window.set_state("WAITING_PERMISSION")
         window._approval_cancel = job.cancel
         try:
             allowed = dialogs.confirm(window, preview) if active() else False
@@ -436,6 +440,7 @@ def start_chat(window, text, origin):
             "PERMISSIONS / APPROVED" if allowed else "PERMISSIONS / DENIED"
         )
         job.respond(allowed)
+        window.set_state("PROCESSING" if allowed and active() else "IDLE")
 
     job.permission.connect(confirm)
     job.clipboard.connect(

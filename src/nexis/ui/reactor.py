@@ -5,12 +5,12 @@ from enum import Enum
 from time import perf_counter
 
 from PySide6.QtCore import QPointF, QRectF, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QPixmap, QRadialGradient, QPolygonF
+from PySide6.QtGui import QFont, QPainter, QPainterPath, QPen, QPixmap, QRadialGradient, QPolygonF
+from nexis.ui.themes import color
+
 from PySide6.QtWidgets import QWidget
 
-RED = QColor("#FF2338")
-GOLD = QColor("#D4AF37")
-MUTED = QColor("#B59B9A")
+
 
 
 class ReactorState(str, Enum):
@@ -21,6 +21,9 @@ class ReactorState(str, Enum):
     EXECUTING = "EXECUTING"
     SUCCESS = "SUCCESS"
     ERROR = "ERROR"
+    WAITING_PERMISSION = "WAITING_PERMISSION"
+    MUTED = "MUTED"
+    OFFLINE = "OFFLINE"
 
 
 class ReactorWidget(QWidget):
@@ -34,6 +37,9 @@ class ReactorWidget(QWidget):
         ReactorState.EXECUTING: 18,
         ReactorState.SUCCESS: 5,
         ReactorState.ERROR: 2,
+        ReactorState.WAITING_PERMISSION: 1,
+        ReactorState.MUTED: 0,
+        ReactorState.OFFLINE: 0,
     }
 
     def __init__(self, parent=None):
@@ -57,7 +63,6 @@ class ReactorWidget(QWidget):
         self.setFocusPolicy(Qt.StrongFocus)
         self.setAccessibleName("NEXIS reactor: open manual commands")
         self.setToolTip("Open manual commands · Enter or Space")
-        self.setCursor(Qt.PointingHandCursor)
 
     def set_state(self, state):
         state = ReactorState(state)
@@ -86,7 +91,7 @@ class ReactorWidget(QWidget):
         self.sync_timer()
 
     def sync_timer(self):
-        if self.paused or self.reduced_motion or not self.isVisible():
+        if self.paused or self.reduced_motion or not self.isVisible() or self.state in {ReactorState.MUTED, ReactorState.OFFLINE}:
             self.timer.stop()
         else:
             fps = 8 if self.state == ReactorState.IDLE else self.active_fps
@@ -143,18 +148,18 @@ class ReactorWidget(QWidget):
         p.translate(size / 2, size / 2)
         p.scale(size / 600, size / 600)
         for radius in (286, 278, 251, 239, 205, 196, 154, 124):
-            self.ring(p, radius, 0, 360, QColor("#570000"), 1)
+            self.ring(p, radius, 0, 360, color("border"), 1)
         for i in range(120):
             a = math.radians(i * 3)
             outer = 273
             inner = 261 if i % 5 == 0 else 267
-            p.setPen(QPen(QColor("#C8102E") if i % 5 == 0 else QColor("#570000"), 1))
+            p.setPen(QPen(color("primary") if i % 5 == 0 else color("border"), 1))
             p.drawLine(
                 QPointF(math.cos(a) * inner, math.sin(a) * inner),
                 QPointF(math.cos(a) * outer, math.sin(a) * outer),
             )
         p.setFont(QFont("Consolas", 8))
-        p.setPen(MUTED)
+        p.setPen(color("muted"))
         for degrees, text in ((0, "090"), (90, "180"), (180, "270"), (270, "000")):
             a = math.radians(degrees)
             p.drawText(
@@ -163,7 +168,7 @@ class ReactorWidget(QWidget):
         for i in range(8):
             p.save()
             p.rotate(i * 45 + 22.5)
-            p.setPen(QPen(QColor("#8B0000"), 1))
+            p.setPen(QPen(color("border"), 1))
             p.drawPolyline(
                 QPolygonF(
                     [QPointF(185, -8), QPointF(220, -8), QPointF(236, -24), QPointF(268, -24)]
@@ -183,11 +188,11 @@ class ReactorWidget(QWidget):
             painter = QPainter(texture)
             painter.setRenderHint(QPainter.Antialiasing)
             glow = QRadialGradient(128, 128, 128)
-            glow.setColorAt(0, QColor("#FFF4E8"))
-            glow.setColorAt(0.13, QColor("#FFD1C8"))
+            glow.setColorAt(0, color("glow"))
+            glow.setColorAt(0.13, color("glow"))
             glow.setColorAt(0.3, accent)
-            glow.setColorAt(0.55, QColor(200, 16, 46, 160))
-            glow.setColorAt(1, QColor(139, 0, 0, 0))
+            glow.setColorAt(0.55, color("primary", 160))
+            glow.setColorAt(1, color("primary", 0))
             painter.setPen(Qt.NoPen)
             painter.setBrush(glow)
             painter.drawEllipse(QPointF(128, 128), 128, 128)
@@ -239,30 +244,36 @@ class ReactorWidget(QWidget):
         pulse = 0.5 + 0.5 * math.sin(math.radians(phase * 8))
         if self.reduced_motion:
             pulse = 0.5
-        accent = GOLD if self.state in (ReactorState.PROCESSING, ReactorState.SUCCESS) else RED
+        accent = color("accent") if self.state in (ReactorState.PROCESSING, ReactorState.SUCCESS) else color("primary")
+        if self.state in (ReactorState.SUCCESS, ReactorState.ERROR):
+            accent = color("success" if self.state == ReactorState.SUCCESS else "error")
+        elif self.state == ReactorState.WAITING_PERMISSION:
+            accent = color("warning")
+        elif self.state in {ReactorState.MUTED, ReactorState.OFFLINE}:
+            accent = color("muted")
         gold_phase = math.floor(phase / 12) * 4
         layers = self.motion_geometry(side)
-        for index, (rotation, color, width) in enumerate((
-                (-phase, QColor("#8B0000"), 6), (phase * 1.5, RED, 2),
-                (phase * 1.5, QColor("#8B0000"), 2), (-gold_phase, GOLD, 2),
-                (phase, QColor("#8B0000"), 2))):
+        for index, (rotation, stroke, width) in enumerate((
+                (-phase, color("border"), 6), (phase * 1.5, color("primary"), 2),
+                (phase * 1.5, color("border"), 2), (-gold_phase, color("accent"), 2),
+                (phase, color("border"), 2))):
             p.save()
             p.rotate(rotation)
-            p.setPen(QPen(color, width))
+            p.setPen(QPen(stroke, width))
             p.setBrush(Qt.NoBrush)
             p.drawPath(layers[index])
             p.restore()
         for i in range(6):
             self.ring(p, 184, i * 60 + phase * 2.4, 38, accent, 5 + pulse * 2)
-        self.ring(p, 255, -phase * 2, 22, GOLD if self.state == ReactorState.SUCCESS else RED, 3)
+        self.ring(p, 255, -phase * 2, 22, color("accent") if self.state == ReactorState.SUCCESS else color("primary"), 3)
         p.save()
         p.rotate(phase * 0.3)
-        p.setPen(QPen(QColor("#C8102E"), 1))
+        p.setPen(QPen(color("primary"), 1))
         p.setBrush(Qt.NoBrush)
         p.drawPath(layers[5])
         p.restore()
         p.setPen(QPen(accent, 1.5))
-        p.setBrush(QColor("#120607"))
+        p.setBrush(color("panel"))
         p.drawEllipse(QPointF(0, 0), 125, 125)
         # Listening/speaking modulation uses only real levels; missing levels never become a synthetic waveform.
         energy = (
@@ -284,26 +295,33 @@ class ReactorWidget(QWidget):
                 95 + i * 5,
                 phase * (1 if i % 2 else -1),
                 270,
-                QColor(255, 35, 56, 50 + i * 25),
+                color("primary", 50 + i * 25),
                 1,
             )
         for i in range(5):
             a = math.radians(phase * (0.6 + i * 0.1) + i * 72)
-            p.setBrush(GOLD if i == 0 else RED)
+            p.setBrush(color("accent") if i == 0 else color("primary"))
             p.drawEllipse(QPointF(math.cos(a) * (151 + i * 9), math.sin(a) * (151 + i * 9)), 2, 2)
-        p.setPen(QColor("#F4E9E5"))
+        p.setPen(color("text"))
         p.setFont(QFont("Consolas", 10, QFont.Bold))
-        p.drawText(QRectF(-110, 85, 220, 24), Qt.AlignCenter, self.state.value)
+        caption = {ReactorState.WAITING_PERMISSION: "AWAITING PERMISSION", ReactorState.PROCESSING: "THINKING"}.get(self.state, self.state.value)
+        p.drawText(QRectF(-135, 85, 270, 24), Qt.AlignCenter, caption)
         p.setFont(QFont("Consolas", 7))
-        p.setPen(MUTED)
+        p.setPen(color("muted"))
         detail = "LOCAL COMMAND CORE"
+        if self.state == ReactorState.MUTED:
+            detail = "MICROPHONE HARD MUTED"
+        elif self.state == ReactorState.OFFLINE:
+            detail = "AI CONNECTION UNAVAILABLE"
+        elif self.state == ReactorState.WAITING_PERMISSION:
+            detail = "REVIEW THE REQUESTED ACTION"
         if self.state in (ReactorState.LISTENING, ReactorState.SPEAKING):
             detail = (
                 "AUDIO LEVEL N/A" if self.audio_level is None else f"SIGNAL {self.audio_level:.0%}"
             )
         p.drawText(QRectF(-120, 109, 240, 20), Qt.AlignCenter, detail)
         if self.hasFocus():
-            self.ring(p, 294, 0, 360, GOLD, 2)
+            self.ring(p, 294, 0, 360, color("accent"), 2)
         p.end()
         self.paint_count += 1
         self.paint_seconds += perf_counter() - started

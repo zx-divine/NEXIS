@@ -23,4 +23,5 @@ Licensing obligations: https://www.qt.io/development/open-source-lgpl-obligation
 Before any public distribution ASH must complete the applicable licence review,
 including corresponding-source availability/offer, required notices and practical
 library replacement. These pointers/instructions are not a claim that all legal
-obligations have been fulfilled. Application licensing remains unresolved.
+obligations have been fulfilled. NEXIS's original work is proprietary; its draft
+EULA awaits owner review and expressly preserves applicable third-party rights.

@@ -4,6 +4,7 @@ import json
 import hashlib
 import ctypes
 import sys
+import ssl
 import certifi
 from pathlib import Path
 import tempfile
@@ -49,16 +50,24 @@ def smoke(app, output):
             wizard.show()
             app.processEvents()
             wizard.grab().save(str(destination / "packaged-welcome.png"))
+            wizard.preferred_name.setText("Package verification")
             wizard.next()
+            assert wizard.currentId() == 1
             app.processEvents()
             wizard.grab().save(str(destination / "packaged-access-disclosure.png"))
             wizard.access.acknowledged.setChecked(True)
             for _ in range(4):
                 wizard.next()
+            assert wizard.currentId() == 5
+            wizard.api_setup_choice.setCurrentIndex(wizard.api_setup_choice.findData('later'))
             app.processEvents()
             wizard.grab().save(str(destination / "packaged-provider-setup.png"))
-            wizard.next()
+            while wizard.currentId() < 8:
+                wizard.next()
             wizard.accept()
+            assert db.setting("welcome_completed")
+            window.settings_page.reload_profile()
+            window.welcome.refresh()
             splash = splash_screen()
             splash.show()
             app.processEvents()
@@ -110,7 +119,9 @@ def smoke(app, output):
                 "qt_platform": app.platformName(),
                 "window_ms": round((perf_counter() - started) * 1000, 1),
                 "pages": list(window.pages),
-                "stylesheet_loaded": bool(window.styleSheet()),
+                "window_title": window.windowTitle(),
+                "stylesheet_loaded": bool(app.styleSheet()),
+                "openssl_version": ssl.OPENSSL_VERSION,
                 "database": "isolated temporary storage",
                 "logo_sha256": hashlib.sha256(asset("NEXIS_logo.png").read_bytes()).hexdigest(),
                 "logo_path": str(asset("NEXIS_logo.png")),
@@ -134,6 +145,38 @@ def smoke(app, output):
                 "windows_voices": window.settings_page.voice_setup.voices.count() - 1,
                 "schema_version": db.rows("PRAGMA user_version")[0]["user_version"],
             }
+            try:
+                report["latest_feature_checks"] = latest_feature_check(window, db)
+            except Exception as exc:
+                report["latest_feature_checks"] = {"status": "FAIL", "error_type": type(exc).__name__}
+                report["ok"] = False
+            try:
+                from nexis.core.themes import THEMES
+                from nexis.storage.database import read_appearance
+                report["themes"] = []
+                panel = window.settings_page.appearance
+                db.set_setting("reduced_motion", True)
+                for selected in THEMES:
+                    panel.theme.setCurrentIndex(panel.theme.findData(selected))
+                    assert panel.preview()
+                    panel.save()
+                    assert read_appearance(db.path)[0] == selected
+                    window.navigate("Dashboard")
+                    app.processEvents()
+                    assert window.grab().save(str(destination / ("theme-" + selected + ".png")))
+                    report["themes"].append(selected)
+                panel.reset()
+                panel.save()
+                report["theme_persistence"] = "PASS: isolated temporary settings only"
+                if sys.platform == "win32":
+                    from nexis.platform.trust import trusted_signature, original_filename, windows_directory
+                    system_target = windows_directory() / "System32/Taskmgr.exe"
+                    report["native_trust"] = {"signature_backend_validated": trusted_signature(system_target),
+                                              "identity_backend_validated": original_filename(system_target) == "taskmgr"}
+                    assert all(report["native_trust"].values())
+            except Exception as exc:
+                report["theme_or_native_trust_error"] = type(exc).__name__
+                report["ok"] = False
             for dependency in (
                 "vosk",
                 "sounddevice",
@@ -192,10 +235,99 @@ def smoke(app, output):
 
             stopped()
 
-        QTimer.singleShot(5000 if capabilities else 100, finish)
+        def guarded_finish():
+            try:
+                finish()
+            except Exception as exc:
+                (destination / "packaged-smoke.json").write_text(json.dumps({
+                    "ok": False, "error_type": type(exc).__name__,
+                    "frozen": bool(getattr(sys, "frozen", False)), "app_version": __version__,
+                }, indent=2), encoding="utf-8")
+                window.close()
+                app.quit()
+
+        QTimer.singleShot(5000 if capabilities else 100, guarded_finish)
         status = app.exec()
         db.close()
-        return status
+        report_path = destination / "packaged-smoke.json"
+        passed = report_path.is_file() and json.loads(report_path.read_text(encoding="utf-8")).get("ok") is True
+        return status if passed else 1
+
+
+def latest_feature_check(window, db):
+    """Exercise actual new UI/storage using disposable data, without OS actions."""
+    from nexis.core.access import require_access
+    from nexis.storage.conversations import Conversations
+
+    checks = {}
+    assert window.windowTitle() == "NEXIS"
+    checks["nexis_window_title"] = "PASS"
+    assert db.setting("welcome_completed") and db.setting("preferred_name") == "Package verification"
+    checks["onboarding_identity_and_completion"] = "PASS"
+    assert db.setting('ai_setup_choice') == 'later'
+    assert not db.setting('wake_word_enabled') and not window.desktop_experience.wake.worker
+    window.always_active_button.click()
+    assert window.stack.currentIndex() == window.pages['Desktop Companion']
+    checks['explicit_api_choice_and_visible_always_active'] = 'PASS'
+    history = [{"role": "user", "content": "Disposable package context"}]
+    window.conversation_history = list(history)
+    window.chat.input.setText("Disposable unsent draft")
+    for key, label in (("voice", "Voice Chat"), ("chat", "Chat"), ("manual", "Dashboard")):
+        window.welcome.mode_buttons[key].click()
+        assert window.stack.currentIndex() == window.pages[label]
+        assert window.conversation_history == history
+        assert window.chat.input.text() == "Disposable unsent draft"
+        assert window.voice.worker is None
+    checks["three_modes_and_context_preservation"] = "PASS"
+    window.settings_button.click()
+    assert window.stack.currentIndex() == window.pages["Settings"]
+    assert len(window.settings_page.category_order) == 8
+    window.settings_page.preferred_name.setText("Package Tester")
+    window.settings_page.launcher_enabled.setChecked(False)
+    window.settings_page.save()
+    assert db.setting("preferred_name") == "Package Tester"
+    assert "Package Tester" in window.welcome.greeting.text()
+    checks["settings_and_name_persistence"] = "PASS"
+    identifier = window.chat.archive.save("Disposable package chat", history)
+    reopened = Database(db.path)
+    try:
+        saved = Conversations(reopened)
+        assert saved.search("package chat")[0]["id"] == identifier
+        assert saved.get(identifier)["messages"] == history
+    finally:
+        reopened.close()
+    window.saved_conversations.refresh()
+    window.saved_conversations.results.setCurrentRow(0)
+    window.saved_conversations.open_selected()
+    assert window.conversation_history == history
+    assert not window.ai_jobs
+    try:
+        window.chat.archive.delete(identifier)
+    except ValueError:
+        pass
+    else:
+        raise ValueError("Saved-chat deletion bypassed authorization")
+    assert window.chat.archive.get(identifier)
+    checks["saved_chat_search_reopen_and_delete_policy"] = "PASS"
+    try:
+        require_access(db, "approved_folder_access")
+    except ValueError:
+        pass
+    else:
+        raise ValueError("A clean profile unexpectedly grants file access")
+    checks["clean_profile_permissions_fail_closed"] = "PASS"
+    window.set_microphone_muted(True)
+    assert window.reactor.state.value == "MUTED" and window.voice.worker is None
+    window.set_microphone_muted(False)
+    assert window.reactor.state.value == "IDLE" and window.voice.worker is None
+    checks["hard_mute_and_explicit_capture_only"] = "PASS"
+    assert window.providers.provider.findText("Ollama") >= 0
+    window.providers.provider.setCurrentText("Ollama")
+    assert window.providers.auth.currentText() == "None"
+    assert window.providers.address.text() == "http://127.0.0.1:11434/v1"
+    assert not window.providers.jobs
+    checks["explicit_ollama_configuration_no_service_start"] = "PASS"
+    return checks
 
 
 def workflow_fixture_check(temporary):

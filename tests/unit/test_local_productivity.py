@@ -25,7 +25,7 @@ def test_memory_persists_edits_searches_deletes_and_migrates(db):
     assert store.search("नमस्ते")[0]["id"] == identifier
     reopened = Database(db.path)
     try:
-        assert reopened.rows("PRAGMA user_version")[0]["user_version"] == 4
+        assert reopened.rows("PRAGMA user_version")[0]["user_version"] == 5
         assert LocalMemory(reopened).search()[0]["body"] == "नमस्ते project"
     finally:
         reopened.close()

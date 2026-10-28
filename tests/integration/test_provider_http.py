@@ -68,6 +68,16 @@ def test_real_http_compatible_chat_has_no_execution_tools(gateway):
     assert received[1]["messages"][-1]["content"] == "नमस्ते"
 
 
+def test_ollama_compatible_local_http_models_and_chat_without_authentication(gateway):
+    address, received = gateway
+    config = {"provider": "Ollama", "endpoint": address + "/v1", "model": "fixture-chat", "key": "", "auth": "None"}
+    assert list_models(config, Event()) == ["fixture-chat"]
+    assert chat(config, "hello", Event()) == "Hello — नमस्ते"
+    assert received[0] == ("/v1/models", None)
+    assert received[1]["model"] == "fixture-chat"
+    assert "tools" not in received[1]
+
+
 def test_redirects_and_authentication_failures_do_not_leak(gateway):
     address, received = gateway
     config = {

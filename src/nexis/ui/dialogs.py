@@ -29,13 +29,18 @@ def confirm(parent, preview):
         "Expected effect: " + preview.effect,
         "Risk: " + preview.risk.name,
         "Permissions: " + preview.permission,
+        "Why approval is needed: " + preview.reason,
+        "Reversibility: " + preview.reversibility,
+        "Windows privileges: Windows may independently deny access or require your action. NEXIS does not bypass elevation.",
+        "If you deny: this step will not run; a workflow stops before its next step. Earlier completed steps remain.",
     ):
         label = QLabel(text)
         label.setWordWrap(True)
         label.setTextFormat(__import__("PySide6.QtCore", fromlist=["Qt"]).Qt.PlainText)
         layout.addWidget(label)
     buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-    buttons.button(QDialogButtonBox.Ok).setText("Confirm")
+    buttons.button(QDialogButtonBox.Ok).setText("Approve")
+    buttons.button(QDialogButtonBox.Cancel).setText("Deny")
     buttons.button(QDialogButtonBox.Cancel).setDefault(True)
     buttons.accepted.connect(dialog.accept)
     buttons.rejected.connect(dialog.reject)

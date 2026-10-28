@@ -1,5 +1,7 @@
 from PySide6.QtCore import Property, QPropertyAnimation, QPointF, QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
+from PySide6.QtGui import QFont, QPainter, QPainterPath, QPen
+from nexis.ui.themes import color
+
 from PySide6.QtWidgets import QHBoxLayout, QPushButton, QWidget
 
 
@@ -50,17 +52,17 @@ class DeckButton(QPushButton):
         for x, y in ((12, 0), (w - 28, 0), (w, 18), (w, h - 10), (w - 10, h), (0, h)):
             shape.lineTo(x, y)
         shape.closeSubpath()
-        p.fillPath(shape, QColor(18 + int(self.progress * 20), 6, 7))
+        p.fillPath(shape, color("hover" if self.progress > .5 else "panel"))
         selected = self.isChecked() or self.hasFocus()
-        p.setPen(QPen(QColor("#D4AF37" if selected else "#C8102E"), 1.5 if selected else 1))
+        p.setPen(QPen(color("accent" if selected else "primary"), 1.5 if selected else 1))
         p.drawPath(shape)
-        p.setPen(QPen(QColor("#FF2338"), 3))
+        p.setPen(QPen(color("primary"), 3))
         p.drawLine(14, 1, 52 + int(self.progress * 45), 1)
-        p.setPen(QColor("#FFD76A" if selected else "#F4E9E5"))
+        p.setPen(color("accent" if selected else "text"))
         p.setFont(QFont("Consolas", 11, QFont.Bold))
         p.drawText(QRectF(12, 8, w - 24, 23), Qt.AlignCenter, self.title)
         p.setFont(QFont("Consolas", 7))
-        p.setPen(QColor("#B59B9A"))
+        p.setPen(color("muted"))
         p.drawText(QRectF(12, 32, w - 24, 16), Qt.AlignCenter, self.subtitle)
 
 

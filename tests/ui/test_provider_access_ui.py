@@ -52,6 +52,7 @@ def test_declined_switch_and_failed_save_keep_default(qtbot, tmp_path, monkeypat
 def test_first_run_requires_real_acknowledgment_and_starts_no_microphone(qtbot, tmp_path):
     database = Database(tmp_path / "fresh.db")
     wizard = WelcomeWizard(database)
+    wizard.preferred_name.setText("Fixture user")
     qtbot.addWidget(wizard)
     wizard.show()
     wizard.next()

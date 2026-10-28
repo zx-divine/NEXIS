@@ -1,5 +1,7 @@
 # Exact versions used by the Windows/Python 3.12 verification run.
 # Use in an isolated environment. This records versions, not wheel hashes.
+# Historical baseline only: setuptools 84.0.0 is affected by GHSA-xmj3-9gf7-h52w.
+# New development/build environments must use requirements-dev.txt (84.1.0+).
 PySide6-Essentials==6.12.0
 shiboken6==6.12.0
 pytest==9.1.1

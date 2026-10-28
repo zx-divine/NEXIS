@@ -1,5 +1,17 @@
-Licence decision pending.
+NEXIS — Proprietary License — All Rights Reserved
 
-The user has not selected or approved a licence for NEXIS Desktop.
-No open-source licence grant is implied by this file. Select an appropriate
-licence and review dependency redistribution obligations before distribution.
+Copyright © 2026 NEXIS. All Rights Reserved.
+
+NEXIS's original application code and original assets are proprietary. No MIT,
+GPL, Apache, or other open-source license is granted for NEXIS's original work.
+No unauthorized redistribution, modification, resale, or reverse engineering is
+permitted, except to the extent required by applicable law or by the licenses of
+third-party components. No trademark registration is asserted.
+
+Third-party components retain their own copyrights and licenses. Nothing in this
+notice restricts rights those licenses grant, including applicable LGPL library
+modification, replacement, relinking, or debugging rights. See the bundled
+third-party notices and license texts.
+
+The proposed end-user agreement awaits owner review. This development notice does
+not activate the proposed free-public-use grant or authorize public distribution.

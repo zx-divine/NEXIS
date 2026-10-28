@@ -14,13 +14,16 @@ from urllib.parse import urlsplit
 
 DEFAULT_ENDPOINTS = {
     "OpenRouter": "https://openrouter.ai/api/v1",
+    "Groq": "https://api.groq.com/openai/v1",
+    "NVIDIA Build": "https://integrate.api.nvidia.com/v1",
     "OmniRoute": "http://127.0.0.1:20128/v1",
+    "Ollama": "http://127.0.0.1:11434/v1",
     "Compatible gateway": "",
     "OpenAI-compatible": "",
     "Custom API Gateway": "",
     "Google Gemini": "https://generativelanguage.googleapis.com",
 }
-LEGACY_PROVIDER_TYPES = {"Ollama", "LM Studio"}
+LEGACY_PROVIDER_TYPES = {"LM Studio"}
 
 
 class ProviderError(ValueError):

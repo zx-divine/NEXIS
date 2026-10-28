@@ -6,6 +6,7 @@ from nexis.ui.setup_services import ProviderPanel, Task
 
 def test_simple_onboarding_and_reused_key(qtbot, db, tmp_path):
     wizard = WelcomeWizard(db)
+    wizard.preferred_name.setText("Fixture user")
     qtbot.addWidget(wizard)
     assert wizard.pageIds() == list(range(9))
     assert wizard.provider.address.text() == "https://openrouter.ai/api/v1"
@@ -183,6 +184,7 @@ def test_first_run_save_updates_already_constructed_settings(qtbot, db, platform
     qtbot.addWidget(window)
     assert window.settings_page.provider.saved is None
     wizard = WelcomeWizard(db)
+    wizard.preferred_name.setText("Fixture user")
     qtbot.addWidget(wizard)
     wizard.show()
     for _ in range(5):

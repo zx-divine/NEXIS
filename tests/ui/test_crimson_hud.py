@@ -89,6 +89,7 @@ def test_reactor_states_timing_and_accessibility(qtbot):
 
 @pytest.mark.parametrize("size", [(1366, 768), (1600, 900), (1920, 1080)])
 def test_dashboard_layout_and_deck(hud, qtbot, size):
+    hud.navigate("Dashboard")
     hud.resize(*size)
     QApplication.processEvents()
     for button in (hud.chat_button, hud.voice_button, hud.manual_button):
@@ -102,7 +103,7 @@ def test_dashboard_layout_and_deck(hud, qtbot, size):
     qtbot.mouseClick(hud.voice_button, Qt.LeftButton)
     assert hud.stack.currentIndex() == hud.pages["Voice Chat"]
     assert hud.voice.worker is None  # Navigation must never enable the microphone.
-    qtbot.mouseClick(hud.manual_button, Qt.LeftButton)
+    qtbot.mouseClick(hud.mode_switches["Dashboard"], Qt.LeftButton)
     assert hud.drawer.isVisible() and hud.reactor.isVisible()
     qtbot.keyClick(hud, Qt.Key_Escape)
     assert not hud.drawer.isVisible()

@@ -43,7 +43,8 @@ def button(text, callback, layout):
             )
 
     control.clicked.connect(invoke)
-    layout.addWidget(control)
+    if layout is not None:
+        layout.addWidget(control)
     return control
 
 

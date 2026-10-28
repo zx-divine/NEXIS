@@ -46,7 +46,7 @@ class Tool:
     timeout: int = 15
     compatibility: str = "Windows 10/11; current user; supported APIs only"
     preconditions: str = (
-        "Granted category; fresh confirmation for medium/high/protected; valid target"
+        "Granted category; validated target; shared operation authorization policy"
     )
     cancellation: str = "Checked before execution and between bounded operations"
     verification: str = "Returns verified state or request acceptance explicitly; never equates page opening to a setting change"
@@ -105,8 +105,8 @@ for operation in ("focus", "minimize", "maximize", "close"):
     )
 register(
     "website_open",
-    "Open a curated website name or confirmed HTTPS URL in the default browser.",
-    schema({"site": string()}),
+    "Open a curated website, bare domain or explicit HTTP(S) URL. Optional browser is an installed registered name (Chrome, Edge, Firefox, Brave, Opera, etc.). Omit for the Windows default. Never silently substitute a browser; page loading is not verified.",
+    schema({"site": string(8192), "browser": string(100)}, ["site"]),
     "browser_control",
 )
 register(
@@ -220,6 +220,10 @@ register(
     schema(),
     "system_settings",
 )
+register("pc_health", "Read local PC Health metadata without changing settings.", schema(), "system_settings")
+register("radio_set", "Set the explicitly requested Wi-Fi/Bluetooth state using Windows APIs and verify readback.",
+         schema({"kind": string(enum=["wifi", "bluetooth"]), "state": string(enum=["on", "off"])}),
+         "system_settings", timeout=30)
 register(
     "volume_get",
     "Read Windows default speaker volume/mute. Does not record or change audio.",
@@ -308,6 +312,45 @@ def validate_steps(steps):
     return steps
 
 
+def prepare_step(db, data_dir, step):
+    """Resolve validation and risk before requesting approval; repeat at the effect boundary."""
+    validate_steps([step])
+    tool, args = TOOLS[step["tool"]], step["arguments"]
+    risk, target = tool.risk, json.dumps(args, ensure_ascii=False, indent=2)
+    reason = "This operation affects private information or makes a meaningful change."
+    reversible = "Review the resource and effect before approving."
+    if tool.name == "website_open":
+        target, _ = resolve_website(args["site"])
+        if not target:
+            raise ValueError("Use a validated HTTP(S) website or domain name.")
+        from nexis.platform.website_launcher import browser_name
+        browser_name(args.get("browser", "default"))
+    if tool.name == "browser_open_tabs":
+        if not all(resolve_website(value)[0] for value in args["sites"]):
+            raise ValueError("Every tab needs a validated HTTP(S) website.")
+    if tool.name in {"folder_open", "file_open", "file_properties", "file_open_location", "file_preview"}:
+        path = operator_files.safe_path(args["path"], db.setting("search_roots"), data_dir=data_dir)
+        target = str(path)
+        if tool.name == "folder_open" and not path.is_dir():
+            raise ValueError("Choose an existing approved folder.")
+        if tool.name == "file_open" and (not path.is_file() or path.suffix.casefold() not in operator_files.OPEN_SUFFIXES):
+            raise ValueError("Only supported ordinary documents/media may be opened; scripts and executables are blocked.")
+    if tool.name == "settings_open" and args["page"] in windows.PROTECTED_PAGES:
+        risk = Risk.HIGH
+        reason = "This opens a sensitive Windows account, authentication or security interface. Only you can complete changes in Windows."
+        reversible = "Opening the page changes nothing. Any later Windows changes have their own consequences."
+    if tool.name == "utility_open" and args["utility"] == "task_manager":
+        risk = Risk.LOW
+    if tool.name == "file_preview":
+        risk = Risk.MEDIUM
+        reason = "Document contents will be read and may enter the active AI conversation."
+        reversible = "A provider transmission cannot be recalled. Deny to keep contents local."
+    if tool.name == "file_recycle":
+        reason = "The selected file will be removed from its current location."
+        reversible = "Windows Recycle Bin recovery may be possible; it is not guaranteed."
+    return Preview(tool.name, target, tool.description, risk, tool.category, reason, reversible)
+
+
 class DeadlineCancel:
     def __init__(self, parent, seconds):
         self.parent, self.deadline = parent, monotonic() + seconds
@@ -320,45 +363,37 @@ class DeadlineCancel:
 
 
 class ToolExecutor:
-    def __init__(self, db, data_dir, platform, confirm, clipboard=None, progress=lambda text: None):
+    def __init__(self, db, data_dir, platform, confirm, clipboard=None, progress=lambda text: None, request_text="", allow_radio=True):
         self.db, self.data_dir, self.platform = db, Path(data_dir), platform
         self.confirm, self.clipboard, self.progress = confirm, clipboard, progress
         self.request_id = uuid4().hex
-        self.engine = Engine(db, platform, Permissions(confirm))
+        self.engine = Engine(db, platform, Permissions(confirm), allow_radio=allow_radio)
+        self.request_text = request_text
+        self.allow_radio = allow_radio
 
     def run(self, step, cancel):
-        validate_steps([step])
+        preview = prepare_step(self.db, self.data_dir, step)
         tool, args = TOOLS[step["tool"]], step["arguments"]
         require_access(self.db, tool.category)
         if tool.category == "file_modifications":
             require_access(self.db, "approved_folder_access")
-        risk = tool.risk
-        if tool.name == "settings_open" and args["page"] in windows.PROTECTED_PAGES:
-            risk = Risk.PROTECTED
+        risk = preview.risk
         if risk >= Risk.HIGH:
             require_access(self.db, "sensitive_operations")
-        if tool.name == "website_open":
-            _, unknown = resolve_website(args["site"])
-            if unknown:
-                risk = Risk.MEDIUM
-        if tool.name == "file_preview":
-            risk = Risk.MEDIUM
-        preview = Preview(
-            tool.name,
-            json.dumps(args, ensure_ascii=False, indent=2),
-            tool.description,
-            risk,
-            tool.category,
-        )
+        if tool.name == "radio_set":
+            if not self.allow_radio:
+                raise ValueError("Review and send the voice transcript before changing a radio.")
+            from nexis.core.intents import local_command
+            expected = "radio " + args["kind"] + " " + args["state"]
+            if self.request_text != expected and local_command(self.request_text) != expected:
+                raise ValueError("Radio changes require a single explicit user request for that radio and state. Model-generated or indirect radio changes are not authorized.")
         status = "failed"
         try:
             if cancel.is_set():
                 raise ValueError("Operation cancelled before execution.")
             # These wrappers use the same Engine risk check and confirmation once.
             delegated = tool.name in {"app_open", "downloads_open", "workflow_run"}
-            if not delegated and (risk >= Risk.MEDIUM or self.db.setting("confirm_low_risk")) and not self.confirm(
-                preview
-            ):
+            if not delegated and not Permissions(self.confirm, self.db.setting("confirm_low_risk")).authorise(preview):
                 raise ValueError("Permission denied or cancelled. This step was not executed.")
             self.progress("EXECUTING " + tool.name)
             require_access(
@@ -369,6 +404,8 @@ class ToolExecutor:
             if risk >= Risk.HIGH:
                 require_access(self.db, "sensitive_operations")
             deadline = DeadlineCancel(cancel, tool.timeout)
+            if deadline.is_set():
+                raise ValueError("Operation cancelled or expired before dispatch; no action was submitted.")
             result = self.dispatch(tool.name, args, deadline)
             if deadline.is_set():
                 raise ValueError(
@@ -439,8 +476,16 @@ class ToolExecutor:
                 raise ValueError(
                     "Use a curated site name or a full HTTPS address; NEXIS does not invent URLs."
                 )
-            self.platform.website(target)
-            return {"request_accepted": True, "url": target}
+            browser = args.get("browser", "default")
+            from nexis.platform.website_launcher import browser_name
+
+            browser = browser_name(browser)
+            if browser == "default":
+                evidence = self.platform.website(target)
+            else:
+                evidence = self.platform.website(target, browser=browser, cancel=cancel)
+            return {**(evidence or {}), "request_accepted": True, "url": target,
+                    "loaded_page_verified": False}
         if name == "browser_open_tabs":
             targets = [resolve_website(value)[0] for value in args["sites"]]
             if not all(targets):
@@ -496,6 +541,12 @@ class ToolExecutor:
             return windows.open_utility(args["utility"])
         if name == "system_information":
             return windows.system_information()
+        if name == "pc_health":
+            from nexis.platform.health import health_snapshot
+            return health_snapshot(self.data_dir, cancel)
+        if name == "radio_set":
+            from nexis.platform.radios import set_state
+            return set_state(args["kind"], args["state"], cancel)
         if name in {"volume_get", "volume_set", "mute_set"}:
             return windows.audio_volume(args.get("percent"), args.get("muted"))
         if name == "clipboard_copy":

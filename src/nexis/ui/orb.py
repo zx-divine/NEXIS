@@ -4,6 +4,7 @@ from PySide6.QtCore import Qt, QPoint, QEvent
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QApplication
 
 from nexis.branding import application_icon
+from nexis.ui.branding import BrandLogo
 from nexis.ui.pages import button
 from nexis.ui.reactor import ReactorWidget
 
@@ -30,7 +31,10 @@ class FloatingOrb(QWidget):
         layout.setContentsMargins(6, 6, 6, 6)
         self.caption = QLabel("NEXIS / IDLE")
         self.caption.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self.caption)
+        branding = QHBoxLayout()
+        branding.addWidget(BrandLogo(24, symbol=True))
+        branding.addWidget(self.caption, 1)
+        layout.addLayout(branding)
         self.reactor = ReactorWidget()
         self.reactor.setMinimumSize(150, 150)
         self.reactor.setAccessibleName("NEXIS floating reactor: drag to move, click to open main window")
@@ -48,7 +52,7 @@ class FloatingOrb(QWidget):
         self.reposition()
 
     def apply_preferences(self):
-        self.setStyleSheet(self.window.styleSheet() + "\nQWidget#floatingOrb {background:#080204; border:1px solid #8B0000; border-radius:12px;}")
+        self.setWindowFlag(Qt.WindowStaysOnTopHint, self.window.db.setting("orb_always_on_top"))
         self.reactor.set_reduced_motion(self.window.db.setting("reduced_motion"))
         self.reactor.set_fps(self.window.db.setting("animation_fps"))
 
@@ -98,4 +102,4 @@ class FloatingOrb(QWidget):
 
     def set_state(self, state):
         self.reactor.set_state(state)
-        self.caption.setText("NEXIS / " + state)
+        self.caption.setText("NEXIS / HARD MUTED" if self.window.db.setting("microphone_muted") else "NEXIS / " + state)

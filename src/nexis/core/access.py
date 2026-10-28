@@ -10,7 +10,7 @@ CATEGORIES = {
     "system_settings": "System settings",
     "terminal_commands": "Terminal commands (not supported; no arbitrary shell execution)",
     "workflow_execution": "Workflow execution",
-    "microphone_access": "Microphone access (only after pressing Talk or Record)",
+    "microphone_access": "Microphone access (Talk/tests, or separately opted-in Hey NEXIS listening)",
     "screen_capture": "Screen capture (explicit preview; separate consent to transmit)",
     "network_actions": "Network-dependent actions",
     "sensitive_operations": "Sensitive operations (fresh confirmation; protected steps stay in Windows)",

@@ -5,7 +5,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QSaveFile, QIODevice
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPlainTextEdit, QLabel,
-    QComboBox, QListWidget, QListWidgetItem, QFileDialog, QMessageBox,
+    QComboBox, QListWidget, QListWidgetItem, QFileDialog, QMessageBox, QCheckBox,
 )
 
 from nexis.storage.memory import LocalMemory, KINDS, MAX_IMPORT_BYTES
@@ -21,6 +21,10 @@ class MemoryPage(QWidget):
         self.jobs = []
         layout = QVBoxLayout(self)
         heading(layout, "LOCAL MEMORY", "Saved only after your approval. Never store passwords, keys, sensitive documents or screenshots. Detection is best effort. Notes stay local and are never automatically added to AI requests.")
+        self.enabled = QCheckBox("Memory ON — allow explicit saves and reviewed imports")
+        self.enabled.setChecked(window.db.setting("memory_enabled"))
+        self.enabled.toggled.connect(self.toggle_memory)
+        layout.addWidget(self.enabled)
         self.query = QLineEdit()
         self.query.setPlaceholderText("Search your memories")
         self.query.textChanged.connect(self.refresh)
@@ -61,6 +65,12 @@ class MemoryPage(QWidget):
         layout.addWidget(self.status)
         self.refresh()
 
+    def toggle_memory(self, enabled):
+        self.window.db.set_setting("memory_enabled", enabled)
+        if not enabled:
+            self.cancel_import()
+        self.status.setText("Memory on. Saving still requires approval." if enabled else "Memory off. Existing notes are preserved for review, export or deletion; new saves/imports are blocked.")
+
     def refresh(self, *args):
         self.list.blockSignals(True)
         self.list.clear()
@@ -90,7 +100,7 @@ class MemoryPage(QWidget):
         self.kind.setCurrentIndex(self.kind.findData("memory"))
         self.title.setText(text.splitlines()[0][:120])
         self.body.setPlainText(text[:8000])
-        self.status.setText("DRAFT ONLY. Review the text and click Save approved memory to persist it.")
+        self.status.setText("DRAFT ONLY. Review the text and click Save approved memory to persist it." if self.window.db.setting("memory_enabled") else "DRAFT ONLY. Memory is off; enable it explicitly before saving. Existing notes are preserved.")
 
     @safe_ui
     def save(self):

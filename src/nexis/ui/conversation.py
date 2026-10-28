@@ -9,9 +9,11 @@ from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
     QHBoxLayout,
+    QGridLayout,
     QLabel,
     QCheckBox,
     QLineEdit,
+    QInputDialog,
     QListWidget,
     QPlainTextEdit,
     QProgressBar,
@@ -33,11 +35,16 @@ class ChatPage(QWidget):
         self.window = window
         self.pending_prompt = ""
         self.stream_item = None
+        from nexis.storage.conversations import Conversations
+
+        self.archive = Conversations(window.db)
+        self.thread_messages = []
+        self.saved_id = None
         layout = QVBoxLayout(self)
         heading(
             layout,
-            "TEXT UPLINK",
-            "Selected online provider · validated Windows tools · session-only messages",
+            "Chat",
+            "Selected provider · permitted tools · save chats explicitly to keep them after closing NEXIS",
         )
         self.provider_status = QLabel()
         self.provider_status.setTextFormat(Qt.PlainText)
@@ -57,21 +64,25 @@ class ChatPage(QWidget):
         row.addWidget(self.input, 1)
         self.send_button = button("Send", self.send, row)
         layout.addLayout(row)
-        controls = QHBoxLayout()
-        button("Copy selected message", self.copy_message, controls)
-        button("Clear conversation", self.clear_conversation, controls)
-        button("Cancel AI request", self.cancel_ai, controls)
-        button("AI Providers / switch", lambda: window.navigate("AI Providers"), controls)
-        button("Retry last prompt", self.retry, controls)
-        button("Return to HUD", lambda: window.navigate("Dashboard"), controls)
+        controls = QGridLayout()
+        for index, (label, callback) in enumerate((
+            ("Copy selected", self.copy_message), ("New conversation", self.clear_conversation),
+            ("Cancel response", self.cancel_ai), ("AI providers", lambda: window.navigate("AI Providers")),
+            ("Retry last prompt", self.retry), ("Open manual commands", window.focus_command),
+            ("Save conversation…", self.save_conversation), ("Saved conversations", lambda: window.navigate("Saved Conversations")),
+        )):
+            control = button(label, callback, None)
+            controls.addWidget(control, index // 3, index % 3)
         layout.addLayout(controls)
         self.add_message(
             "NEXIS",
-            "Online uplink ready. Choose your AI provider to chat or plan permitted Windows actions. "
-            "Chat is kept only until this application closes.",
+            "Choose your AI provider to chat or plan permitted Windows actions. Chats stay in memory until you choose Save conversation. Saved chats are private plaintext; keep secrets out of them.",
         )
 
     def add_message(self, role, text):
+        if role in {"YOU", "NEXIS"}:
+            self.thread_messages.append({"role": "user" if role == "YOU" else "assistant", "content": text})
+            self.thread_messages = self.thread_messages[-200:]
         self.messages.addItem(role + "  //  " + text)
         while self.messages.count() > 200:
             self.messages.takeItem(0)
@@ -101,8 +112,20 @@ class ChatPage(QWidget):
                 job.respond(False)
         self.stream_item = None
         self.messages.clear()
+        self.input.clear()
         self.pending_prompt = ""
         self.window.conversation_history.clear()
+        self.thread_messages.clear()
+        self.saved_id = None
+
+    def save_conversation(self):
+        if any(job.isRunning() for job in self.window.ai_jobs) or self.window.worker and self.window.worker.isRunning():
+            raise ValueError("Finish or cancel active work before saving a completed chat.")
+        title = self.archive.get(self.saved_id)["title"] if self.saved_id else next((m["content"][:64] for m in self.thread_messages if m["role"] == "user"), "Saved conversation")
+        title, accepted = QInputDialog.getText(self, "Save private conversation", "Title (saved as private plaintext; avoid sensitive information)", text=title)
+        if accepted:
+            self.saved_id = self.archive.save(title, self.thread_messages, self.saved_id)
+            self.window.saved_conversations.refresh()
 
     def show_stream(self, text):
         if text.lstrip().startswith(("{", "[", "`")):
@@ -141,6 +164,7 @@ class VoicePage(QWidget):
         self.window, self.worker = window, None
         self.turn = VoiceTurn()
         self.pending_transcript = ""
+        self.radio_reviewed = False
         self.speech_id = None
         self.speech_service = None
         self.turn_error = False
@@ -149,8 +173,8 @@ class VoicePage(QWidget):
         layout = QVBoxLayout(self)
         heading(
             layout,
-            "VOICE UPLINK",
-            "Talk → Vosk transcript → selected AI provider → Windows speech. No recording starts automatically.",
+            "Voice",
+            "Talk or opt-in Hey NEXIS → local transcript → selected AI provider → Windows speech. Wake listening is controlled in Always Active.",
         )
         row = QHBoxLayout()
         self.reactor = ReactorWidget()
@@ -226,11 +250,13 @@ class VoicePage(QWidget):
         visual = {"TRANSCRIBING": "PROCESSING", "THINKING": "PROCESSING", "CANCELLED": "IDLE"}.get(
             value, value
         )
+        if visual == "IDLE" and self.window.microphone_muted:
+            visual = "MUTED"
         self.reactor.set_state(ReactorState(visual))
         self.state.emit(value)
-        self.indicator.setStyleSheet(
-            "color: #ff304d; font-weight: bold;" if value == "LISTENING" else ""
-        )
+        self.indicator.setProperty("state", "recording" if value == "LISTENING" else "")
+        self.indicator.style().unpolish(self.indicator)
+        self.indicator.style().polish(self.indicator)
         busy = value in {"LISTENING", "TRANSCRIBING", "THINKING", "SPEAKING"}
         self.execute.setEnabled(not busy)
         self.read_button.setEnabled(not busy)
@@ -268,8 +294,9 @@ class VoicePage(QWidget):
         ):
             return
         try:
+            self.window.desktop_experience.wake.pause()
             if self.window.db.setting("microphone_muted"):
-                raise ValueError("Hard mute is on. Select Wake / enable microphone first; no recording starts automatically.")
+                raise ValueError("Hard mute is on. Unmute to enable Talk or resume your opted-in Hey NEXIS listener.")
             require_access(self.window.db, "microphone_access")
         except ValueError as exc:
             self.failure(str(exc))
@@ -320,6 +347,13 @@ class VoicePage(QWidget):
         if generation != self.turn.generation or self.window.closing:
             return
         speech = self.window.settings_page.voice_setup.speech
+        wake_worker = self.window.desktop_experience.wake.worker
+        if wake_worker and wake_worker.isRunning():
+            if monotonic() > self.capture_deadline:
+                self.failure('Wake microphone is still stopping. Retry Talk after it releases the input.')
+            else:
+                QTimer.singleShot(80, lambda: self.begin_capture(generation))
+            return
         if speech and speech.busy.is_set():
             if monotonic() > self.capture_deadline:
                 self.failure("Windows speech has not stopped yet. Retry Talk after playback ends.")
@@ -402,10 +436,17 @@ class VoicePage(QWidget):
         if worker.cancel.is_set():
             self.cancelled()
         elif not self.turn_error and self.pending_transcript:
-            if self.pending_transcript.casefold().strip(" .!?") in {"go to sleep", "sleep nexis", "sleep nexus", "hard mute"}:
+            if self.pending_transcript.casefold().strip(" .!?") in {"go to sleep", "sleep nexis", "sleep nexus", "hard mute", "stop listening", "stop recording"}:
                 self.window.set_microphone_muted(True)
             else:
-                self.submit_transcript()
+                from nexis.core.intents import local_command
+                command = local_command(self.pending_transcript)
+                if command and command.startswith("radio "):
+                    self.hands_free_armed = False
+                    self.change_state(VoiceState.IDLE)
+                    self.status.setText("Review the radio command above, then click Retry / send transcript. Recognized speech alone does not change radios.")
+                else:
+                    self.submit_transcript(reviewed=False)
         elif not self.turn_error:
             self.failure(
                 "No speech was recognized. Check the live level and selected microphone, then Talk again. Nothing was sent."
@@ -533,7 +574,7 @@ class VoicePage(QWidget):
         self.cancelled()
         self.level.setValue(0)
 
-    def submit_transcript(self):
+    def submit_transcript(self, reviewed=True):
         if self.worker and self.worker.isRunning():
             self.status.setText("Wait for the microphone to be released before sending.")
             return
@@ -544,7 +585,11 @@ class VoicePage(QWidget):
             return
         text = self.transcript.text().strip()
         if text:
-            self.request.emit(text)
+            self.radio_reviewed = reviewed
+            try:
+                self.request.emit(text)
+            finally:
+                self.radio_reviewed = False
 
     def return_to_hud(self):
         self.stop()

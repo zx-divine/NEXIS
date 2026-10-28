@@ -16,7 +16,7 @@ def test_database_persists_and_migrates(tmp_path):
     db = Database(path)
     assert db.setting("theme") == "light"
     assert db.rows("SELECT text FROM snippets")[0]["text"] == "Hello!"
-    assert db.rows("PRAGMA user_version")[0]["user_version"] == 4
+    assert db.rows("PRAGMA user_version")[0]["user_version"] == 5
     db.close()
 
 
@@ -36,7 +36,7 @@ def test_settings_validation_and_recovery(db):
     db.execute("UPDATE settings SET value=? WHERE key='search_roots'", ("[1]",))
     assert db.setting("search_roots") == []
     db.execute("UPDATE settings SET value=? WHERE key='theme'", ("broken json",))
-    assert db.setting("theme") == "dark"
+    assert db.setting("theme") == "og"
 
 
 def test_retention_and_disabled_history(db):

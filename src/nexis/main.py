@@ -57,7 +57,7 @@ def main():
         splash.close()
         QMessageBox.critical(None, "NEXIS could not start", str(exc))
         return 1
-    if not db.setting("welcome_completed") or not db.setting("system_access_acknowledged"):
+    if not db.setting("welcome_completed") or not db.setting("system_access_acknowledged") or not db.setting('preferred_name'):
         splash.close()
         wizard = WelcomeWizard(db)
         wizard.setStyleSheet(window.styleSheet())
@@ -68,7 +68,9 @@ def main():
             return 0
         window.refresh()
         window.settings_page.provider.reload_saved()
+        window.settings_page.reload_profile()
         window.apply_theme()
+        window.show_launch_mode()
     if db.setting("start_minimised") or "--minimised" in sys.argv:
         window.showMinimized()
     elif db.setting("start_maximized"):

@@ -91,17 +91,27 @@ class SpeechService(QThread):
     def run(self):
         initialized = False
         try:
+            if self.cancel.is_set():
+                return
             import pythoncom
             import win32com.client
 
             pythoncom.CoInitialize()
             initialized = True
+            if self.cancel.is_set():
+                return
             speaker = win32com.client.Dispatch("SAPI.SpVoice")
+            if self.cancel.is_set():
+                return
             self.bind_output(speaker)
+            if self.cancel.is_set():
+                return
             tokens = speaker.GetVoices()
             available = {tokens.Item(i).Id: tokens.Item(i) for i in range(tokens.Count)}
             if not available:
                 raise ValueError("No Windows speech voice is installed.")
+            if self.cancel.is_set():
+                return
             self.voices.emit([(key, token.GetDescription()) for key, token in available.items()])
             if self.preference in available:
                 speaker.Voice = available[self.preference]

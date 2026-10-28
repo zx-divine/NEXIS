@@ -71,11 +71,12 @@ def test_sensitive_command_cancel(window, qtbot, db, monkeypatch):
 
 def test_settings_persistence(window, db):
     page = window.settings_page
-    page.theme.setCurrentText("light")
+    page.theme.setCurrentText("Clean White")
+    page.appearance.save()
     page.limit.setValue(12)
     page.history.setChecked(False)
     page.save()
-    assert db.setting("theme") == "light"
+    assert db.setting("theme") == "arctic"
     assert db.setting("history_limit") == 12
     assert not db.setting("history_enabled")
 

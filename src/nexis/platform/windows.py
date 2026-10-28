@@ -1,16 +1,16 @@
 import os
 import subprocess
 import sys
-import webbrowser
 from pathlib import Path
 
-from nexis.utils.validation import executable, url
+from nexis.utils.validation import executable
 
 BUILTINS = {
     "notepad": "notepad.exe",
     "calculator": "calc.exe",
     "explorer": "explorer.exe",
     "paint": "mspaint.exe",
+    "task_manager": "Taskmgr.exe",
 }
 
 
@@ -30,9 +30,10 @@ class Windows:
             raise ValueError("This Windows application is not installed or is unavailable.")
         subprocess.Popen([str(path)], shell=False, close_fds=True)
 
-    def website(self, target):
-        if not webbrowser.open(url(target), new=2):
-            raise OSError("No default browser accepted the request.")
+    def website(self, target, browser="default", cancel=None):
+        from nexis.platform.website_launcher import launch_website
+
+        return launch_website(target, browser, cancel)
 
     def folder(self, path):
         self.require_windows()

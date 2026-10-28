@@ -5,9 +5,9 @@ from nexis.core.audio import contextual_greeting, greeting_recognizer
 
 
 class TranscriptDecoder:
-    def __init__(self, model, factory, rate):
+    def __init__(self, model, factory, rate, *, contextual=True):
         self.main = factory(model, rate)
-        self.hint = greeting_recognizer(model, factory, rate)
+        self.hint = greeting_recognizer(model, factory, rate) if contextual else None
         self.rate, self.samples = rate, 0
         self.parts, self.hints = [], []
         self.raw = ""

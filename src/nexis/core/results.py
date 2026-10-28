@@ -7,7 +7,8 @@ class Risk(IntEnum):
     LOW = 1
     MEDIUM = 2
     HIGH = 3
-    PROTECTED = 4
+    CRITICAL = 4
+    PROTECTED = CRITICAL  # Historical name; new sensitive page navigation uses HIGH.
 
 
 @dataclass(frozen=True)
@@ -23,6 +24,8 @@ class Preview:
     effect: str
     risk: Risk
     permission: str = "Current Windows user; no elevation"
+    reason: str = "This operation can affect private data or make a meaningful change."
+    reversibility: str = "Depends on the affected resource; review before approving."
 
 
 @dataclass

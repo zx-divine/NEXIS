@@ -60,7 +60,7 @@ class Management:
             Preview(
                 "Export personal data",
                 str(target),
-                "Includes snippet text, names and private paths. Store privately. Local Memory has a separate export; indexed document text is excluded.",
+                "Includes saved conversations, snippet text, names and private paths. Store privately. Local Memory has a separate export; indexed document text is excluded.",
                 Risk.HIGH,
             )
         )
@@ -71,7 +71,7 @@ class Management:
             Preview(
                 "Delete all NEXIS data",
                 "Local NEXIS database",
-                "Erase snippets, workflows, shortcuts, history, memories, indexed text and settings; "
+                "Erase saved conversations, snippets, workflows, shortcuts, history, memories, indexed text and settings; "
                 "disable Windows startup. This cannot be undone.",
                 Risk.HIGH,
             )

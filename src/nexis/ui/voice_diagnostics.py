@@ -281,13 +281,17 @@ class VoiceDiagnostics(QMainWindow):
         self.indicator.setText(text)
         self.log.appendPlainText(text)
         if text.startswith("LISTENING"):
-            self.indicator.setStyleSheet("color: #ff304d; font-weight: bold;")
+            self.indicator.setProperty("state", "recording")
+            self.indicator.style().unpolish(self.indicator)
+            self.indicator.style().polish(self.indicator)
             self.record["microphone_detection"] = "PASS"
             if self.cancellation_test:
                 self.cancel_reached_listening = True
                 QTimer.singleShot(1000, self.cancel_recording)
         else:
-            self.indicator.setStyleSheet("")
+            self.indicator.setProperty("state", "")
+            self.indicator.style().unpolish(self.indicator)
+            self.indicator.style().polish(self.indicator)
 
     def stop_recording(self):
         if self.worker and self.worker.isRunning():
@@ -332,7 +336,9 @@ class VoiceDiagnostics(QMainWindow):
     def capture_finished(self):
         self.level.setValue(0)
         self.indicator.setText("MICROPHONE OFF — capture worker finished")
-        self.indicator.setStyleSheet("")
+        self.indicator.setProperty("state", "")
+        self.indicator.style().unpolish(self.indicator)
+        self.indicator.style().polish(self.indicator)
         self.stop_button.setEnabled(False)
         self.cancel_button.setEnabled(False)
         self.devices.setEnabled(True)
@@ -471,8 +477,11 @@ def main():
     app.setApplicationName("NEXIS Voice Diagnostics")
     app.setWindowIcon(application_icon())
     window = VoiceDiagnostics()
-    theme = Path(__file__).with_name("theme.qss")
-    window.setStyleSheet(theme.read_text(encoding="utf-8"))
+    from nexis.ui.themes import apply
+
+    from nexis.storage.database import read_appearance
+    profile = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData/Local"))) / "NEXIS/NEXIS Desktop/nexis.db"
+    apply(*read_appearance(profile))
     window.show()
     return app.exec()
 

@@ -15,9 +15,10 @@ class CommandWorker(QThread):
     phase = Signal(str)
     step = Signal(int, object)
 
-    def __init__(self, db, text, platform=None):
+    def __init__(self, db, text, platform=None, allow_radio=True):
         super().__init__()
         self.db, self.text, self.platform = db, text, platform
+        self.allow_radio = allow_radio
         self.cancel = Event()
         self.pause = Event()
         self.answer = Event()
@@ -41,7 +42,7 @@ class CommandWorker(QThread):
 
     def run(self):
         try:
-            engine = Engine(self.db, self.platform, Permissions(self.confirm))
+            engine = Engine(self.db, self.platform, Permissions(self.confirm), allow_radio=self.allow_radio)
             effective_cancel = self.cancel
             if self.text.strip().casefold().startswith("run "):
                 from nexis.core.tools import DeadlineCancel

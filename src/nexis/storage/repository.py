@@ -3,7 +3,8 @@ import json
 from nexis.core.commands import REGISTRY
 from nexis.core.parser import parse
 from nexis.platform.windows import BUILTINS
-from nexis.utils.validation import executable, name, url
+from nexis.utils.validation import executable, name
+from nexis.core.websites import website_url
 
 
 class Repository:
@@ -23,7 +24,7 @@ class Repository:
         if kind == "application":
             target = str(executable(target))
         elif kind == "website":
-            target = url(target.strip())
+            target = website_url(target.strip())
         else:
             raise ValueError("Unknown shortcut type.")
         self.db.execute("INSERT OR REPLACE INTO shortcuts VALUES (?,?,?)", (title, kind, target))
@@ -46,8 +47,9 @@ def validate_workflow(commands):
         request = parse(command)
         if (
             request.action not in REGISTRY
-            or request.action not in {"open", "folder", "copy"}
-            or not request.argument
+            or request.action not in {"open", "folder", "copy", "downloads", "documents", "desktop",
+                                      "document", "system_information", "pc_health", "settings", "radio"}
+            or bool(request.argument) != bool(REGISTRY[request.action].argument)
         ):
-            raise ValueError("Workflow steps may use only open, folder or copy with an argument.")
+            raise ValueError("Workflow steps must be supported bounded commands with valid arguments. Nested workflows and arbitrary scripts are not supported.")
     return commands

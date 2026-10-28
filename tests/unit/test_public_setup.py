@@ -90,11 +90,9 @@ def test_curated_websites(text, db, platform):
 @pytest.mark.parametrize(
     "text",
     [
-        "http://example.com",
         "javascript:alert(1)",
         "file:///C:/Windows",
         "data:text/plain,x",
-        "example.com",
         "https://u:p@example.com",
     ],
 )
@@ -103,9 +101,9 @@ def test_unsafe_or_invented_destinations_rejected(text):
         resolve_website(text)
 
 
-def test_unknown_domain_needs_confirmation_and_saved_shortcut_wins(db, platform):
-    assert not Engine(db, platform).execute("open https://example.com").ok
-    assert not platform.calls
+def test_valid_unknown_domain_runs_automatically_and_saved_shortcut_wins(db, platform):
+    assert Engine(db, platform).execute("open https://example.com").ok
+    assert platform.calls == [("website", "https://example.com")]
     assert (
         Engine(db, platform, Permissions(lambda preview: True))
         .execute("open https://example.com")
@@ -313,7 +311,7 @@ def test_schema_one_migration_is_additive_and_idempotent(tmp_path):
     old.close()
     for _ in range(2):
         upgraded = Database(path)
-        assert upgraded.rows("PRAGMA user_version")[0]["user_version"] == 4
+        assert upgraded.rows("PRAGMA user_version")[0]["user_version"] == 5
         assert not upgraded.setting("history_enabled")
         assert upgraded.rows("SELECT text FROM snippets")[0]["text"] == "preserved"
         upgraded.close()

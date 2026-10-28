@@ -1,11 +1,9 @@
 import json
 import logging
 import sqlite3
-from pathlib import Path
 from threading import Event
 from time import monotonic
 
-from nexis.actions.files import scoped
 from nexis.core.commands import REGISTRY
 from nexis.core.parser import parse
 from nexis.core.permissions import Permissions
@@ -13,9 +11,9 @@ from nexis.core.launch_policy import launch_risk
 from nexis.core.results import Preview, Result, Risk
 from nexis.platform.windows import BUILTINS, Windows
 from nexis.storage.repository import validate_workflow
-from nexis.utils.validation import executable, name, url
+from nexis.utils.validation import executable, name
 from nexis.core.catalog import Catalog
-from nexis.core.websites import resolve_website
+from nexis.core.websites import resolve_website, split_browser, website_url
 from nexis.core.access import require_access
 from nexis.platform.discovery import (
     verified_exe,
@@ -27,10 +25,11 @@ from nexis.platform.discovery import (
 
 
 class Engine:
-    def __init__(self, db, platform=None, permissions=None):
+    def __init__(self, db, platform=None, permissions=None, allow_radio=True):
         self.db = db
         self.platform = platform or Windows()
         self.permissions = permissions or Permissions()
+        self.allow_radio = allow_radio
 
     def prepare(self, request):
         if request.action not in REGISTRY:
@@ -42,7 +41,15 @@ class Engine:
         target = arg
         risk = spec.risk
         payload = None
+        from nexis.core.intents import command_tool
+        step = command_tool(request)
+        if step:
+            if step["tool"] == "radio_set" and not self.allow_radio:
+                raise ValueError("Review the recognized transcript and click Retry / send transcript before changing a radio. Voice recognition alone cannot authorize this change.")
+            from nexis.core.tools import prepare_step
+            return prepare_step(self.db, self.db.path.parent, step), ("tool", step)
         if request.action == "open":
+            arg, browser = split_browser(arg)
             direct_id = arg[4:] if arg.startswith("app:") else ""
             if direct_id and (
                 len(direct_id) != 24 or any(c not in "0123456789abcdef" for c in direct_id)
@@ -61,9 +68,9 @@ class Engine:
                 return Preview(
                     "open",
                     website,
-                    "Open this website in your default browser",
-                    Risk.MEDIUM if unfamiliar else spec.risk,
-                ), ("website", website)
+                    "Submit this website to " + ("your Windows default browser" if browser == "default" else browser),
+                    Risk.LOW,
+                ), ("website", website, browser)
             arg = arg.strip().casefold() if catalog_matches else name(arg) if not direct_id else arg
             if arg in BUILTINS:
                 payload = ("builtin", arg)
@@ -88,6 +95,8 @@ class Engine:
                             "Application not found. Check the name or rescan Applications. For an unfamiliar website, use its full HTTPS address."
                         )
                     app = apps[0]
+                    if browser != "default":
+                        raise ValueError("An explicit browser can only be used with a website destination.")
                     if app["kind"] == "exe":
                         target = verified_exe(app["target"])
                     elif app["kind"] == "appx" and valid_app_id(app["target"]):
@@ -103,25 +112,36 @@ class Engine:
                         app["name"] + "\n" + target,
                         "Launch installed application using its verified target",
                         launch_risk(target, appx=app["kind"] == "appx"),
+                        "application_launching",
+                        "Executable identity, signature, purpose or requested privilege needs review. Opening this target runs code with your Windows permissions.",
+                        "A running program may change data; those changes may not be reversible.",
                     ), (app["kind"], target)
                 row = rows[0]
                 if row["kind"] == "website":
-                    target = url(row["target"])
+                    target = website_url(row["target"])
                 elif row["kind"] == "application":
                     target = str(executable(row["target"]))
                     risk = launch_risk(target)
                 else:
                     raise ValueError("Unsupported shortcut type.")
-                payload = (row["kind"], target)
+                payload = (row["kind"], target, browser) if row["kind"] == "website" else (row["kind"], target)
+            if browser != "default" and payload[0] != "website":
+                raise ValueError("An explicit browser can only be used with a website destination.")
         elif request.action == "folder":
-            target = scoped(Path(arg), self.db.setting("search_roots"))
+            from nexis.actions.operator_files import safe_path
+            target = safe_path(arg, self.db.setting("search_roots"), data_dir=self.db.path.parent)
             if not target.is_dir():
                 raise ValueError("Choose an approved folder.")
             payload = target
-        elif request.action == "downloads":
-            target = known_folder("374DE290-123F-4565-9164-39C4925E467B")
+        elif request.action in {"downloads", "documents", "desktop"}:
+            identifier = {"downloads": "374DE290-123F-4565-9164-39C4925E467B",
+                          "documents": "FDD39AD0-238F-46AF-ADB4-6C85480369C7",
+                          "desktop": "B4BFCC3A-DB2C-424C-B029-7FE99A87C641"}[request.action]
+            target = known_folder(identifier)
             if not target.is_dir():
                 raise ValueError("Windows Downloads folder is unavailable.")
+            from nexis.actions.operator_files import safe_path
+            target = safe_path(str(target), [str(target)])
             payload = target
         elif request.action == "copy":
             rows = self.db.rows("SELECT text FROM snippets WHERE name=?", (name(arg),))
@@ -142,6 +162,10 @@ class Engine:
             for step in payload:
                 self.prepare(parse(step))
             target = "\n".join(payload)
+        if request.action == "open" and risk >= Risk.HIGH:
+            return Preview(request.action, str(target), spec.description, risk, "application_launching",
+                           "This executable has not qualified as an ordinary trusted application. Opening it runs code with your Windows permissions.",
+                           "A running program may change data; those changes may not be reversible."), payload
         return Preview(request.action, str(target), spec.description, risk), payload
 
     def execute(
@@ -158,6 +182,8 @@ class Engine:
             category = {
                 "folder": "approved_folder_access",
                 "downloads": "approved_folder_access",
+                "documents": "approved_folder_access",
+                "desktop": "approved_folder_access",
                 "find": "approved_folder_access",
                 "copy": "clipboard_access",
                 "run": "workflow_execution",
@@ -172,7 +198,8 @@ class Engine:
             if preview.risk >= Risk.HIGH:
                 require_access(self.db, "sensitive_operations")
             self.permissions.confirm_low = self.db.setting("confirm_low_risk")
-            if not self.permissions.authorise(preview):
+            delegated = isinstance(payload, tuple) and payload[0] == "tool"
+            if not delegated and not self.permissions.authorise(preview):
                 result = Result(False, "Cancelled: permission was not granted.")
             elif cancel.is_set():
                 result = Result(False, "Cancelled before execution.")
@@ -182,7 +209,10 @@ class Engine:
                     require_access(self.db, category)
                 if preview.risk >= Risk.HIGH:
                     require_access(self.db, "sensitive_operations")
-                result = self.dispatch(request, payload, cancel, on_step, pause, on_phase)
+                fresh_preview, fresh_payload = self.prepare(request)
+                if fresh_preview != preview or fresh_payload != payload:
+                    raise ValueError("The resolved target changed during authorization. Retry and review the current target.")
+                result = self.dispatch(request, fresh_payload, cancel, on_step, pause, on_phase)
         except (ValueError, OSError, sqlite3.Error, TypeError, KeyError) as exc:
             logging.getLogger("nexis").warning("Action failed (%s)", type(exc).__name__)
             result = Result(
@@ -201,8 +231,23 @@ class Engine:
         if cancel.is_set():
             return Result(False, "Cancelled or expired before dispatch; no action was submitted.")
         action, arg = REGISTRY[request.action].handler, request.argument
+        if action == "tool":
+            from nexis.core.tools import ToolExecutor
+            intent = request.action + " " + request.argument
+            if request.action == "radio":
+                intent = "radio " + payload[1]["arguments"]["kind"] + " " + payload[1]["arguments"]["state"]
+            executor = ToolExecutor(self.db, self.db.path.parent, self.platform, self.permissions.confirm,
+                                    request_text=intent, allow_radio=self.allow_radio)
+            data = executor.run(payload[1], cancel)
+            if request.action in {"system_information", "pc_health"}:
+                message = request.action.replace("_", " ").title() + ":\n" + json.dumps(data, ensure_ascii=False, indent=2)
+            elif request.action == "settings":
+                message = "Windows settings launch request accepted. No setting was changed by NEXIS."
+            else:
+                message = data.get("message", "Launch request accepted; completion has not been independently verified.")
+            return Result(True, message, data)
         if action == "open":
-            kind, target = payload
+            kind, target = payload[:2]
             if kind == "builtin":
                 self.platform.launch(target, builtin=True)
             elif kind in {"application", "exe"}:
@@ -215,7 +260,12 @@ class Engine:
             elif kind == "appx":
                 launch_registered(target)
             else:
-                self.platform.website(target)
+                browser = payload[2] if len(payload) > 2 else "default"
+                if browser == "default":
+                    self.platform.website(target)
+                else:
+                    self.platform.website(target, browser=browser, cancel=cancel)
+                return Result(True, "Browser launch request submitted: " + arg + ". Page load has not been independently verified.")
             return Result(True, "Launch request accepted: " + arg)
         if action in {"folder", "downloads"}:
             self.platform.folder(payload)

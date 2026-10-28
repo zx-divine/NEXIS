@@ -50,9 +50,13 @@ class LocalMemory:
         return [row for row in rows if query in (row["title"] + "\n" + row["body"]).casefold()]
 
     def save(self, entry, identifier=None):
+        if not self.db.setting("memory_enabled"):
+            raise ValueError("Memory is off. Existing notes remain available to review, export or delete. Enable memory before saving.")
         entry = validate_entry(entry)
         now = datetime.now(timezone.utc).isoformat()
         with self.db.lock, self.db.connection:
+            if not self.db.setting("memory_enabled"):
+                raise ValueError("Memory is off. No note was saved.")
             existing = self.db.connection.execute("SELECT created_at FROM local_memories WHERE id=?", (identifier,)).fetchone() if identifier else None
             if identifier and not existing:
                 raise ValueError("That memory no longer exists. Refresh the list.")
@@ -73,6 +77,8 @@ class LocalMemory:
         return json.dumps({"version": 1, "memories": [validate_entry({k: row[k] for k in ("kind", "title", "body")}) for row in self.search()]}, ensure_ascii=False, indent=2)
 
     def import_text(self, text, cancel=None):
+        if not self.db.setting("memory_enabled"):
+            raise ValueError("Memory is off. Enable memory before importing notes.")
         if not isinstance(text, str) or len(text.encode("utf-8")) > MAX_IMPORT_BYTES:
             raise ValueError("Memory import is limited to 40 MB.")
         try:
@@ -95,6 +101,8 @@ class LocalMemory:
             now = datetime.now(timezone.utc).isoformat()
             self.db.connection.executemany("INSERT INTO local_memories VALUES (?,?,?,?,?,?)",
                 [(uuid4().hex, *entry, now, now) for entry in sorted(new)])
+            if not self.db.setting("memory_enabled"):
+                raise ValueError("Memory was disabled; import rolled back.")
             if cancel and cancel.is_set():
                 raise ValueError("Memory import cancelled; previous notes preserved.")
         return len(new)
