@@ -10,8 +10,9 @@ from pathlib import Path
 import tempfile
 from time import perf_counter
 
-from PySide6.QtCore import QTimer, QLibraryInfo, qVersion
-from PySide6.QtGui import QFontDatabase, QImage
+from PySide6.QtCore import QTimer, QLibraryInfo, qVersion, Qt
+from PySide6.QtGui import QFontDatabase, QImage, QKeyEvent
+from PySide6.QtWidgets import QApplication, QWizard
 
 from nexis.storage.database import Database
 from nexis.branding import APP_USER_MODEL_ID, asset
@@ -45,29 +46,13 @@ def smoke(app, output):
             window.start_services()
 
         def finish():
-            wizard = WelcomeWizard(db)
-            wizard.setStyleSheet(window.styleSheet())
-            wizard.show()
+            navigation = onboarding_navigation_check(app, db, destination)
+            db.set_setting("default_launch_mode", "chat")
+            window.onboarding_finished()
+            assert window.stack.currentIndex() == window.pages["Welcome"]
+            assert db.setting("default_launch_mode") == "chat"
             app.processEvents()
-            wizard.grab().save(str(destination / "packaged-welcome.png"))
-            wizard.preferred_name.setText("Package verification")
-            wizard.next()
-            assert wizard.currentId() == 1
-            app.processEvents()
-            wizard.grab().save(str(destination / "packaged-access-disclosure.png"))
-            wizard.access.acknowledged.setChecked(True)
-            for _ in range(4):
-                wizard.next()
-            assert wizard.currentId() == 5
-            wizard.api_setup_choice.setCurrentIndex(wizard.api_setup_choice.findData('later'))
-            app.processEvents()
-            wizard.grab().save(str(destination / "packaged-provider-setup.png"))
-            while wizard.currentId() < 8:
-                wizard.next()
-            wizard.accept()
-            assert db.setting("welcome_completed")
-            window.settings_page.reload_profile()
-            window.welcome.refresh()
+            window.grab().save(str(destination / "onboarding-three-mode-welcome.png"))
             splash = splash_screen()
             splash.show()
             app.processEvents()
@@ -117,6 +102,7 @@ def smoke(app, output):
                     Path(QLibraryInfo.path(QLibraryInfo.PluginsPath)) / "platforms" / "qwindows.dll"
                 ).exists(),
                 "qt_platform": app.platformName(),
+                "device_pixel_ratio": window.devicePixelRatioF(),
                 "window_ms": round((perf_counter() - started) * 1000, 1),
                 "pages": list(window.pages),
                 "window_title": window.windowTitle(),
@@ -135,6 +121,7 @@ def smoke(app, output):
                     for logo in window.stack.widget(window.pages["About"]).findChildren(BrandLogo)
                 ),
                 "wizard_completed": db.setting("welcome_completed"),
+                "onboarding_navigation": navigation,
                 "app_user_model_id": process_id,
                 "app_user_model_id_matches": process_id == APP_USER_MODEL_ID,
                 "native_window_icons": native_icons,
@@ -164,7 +151,23 @@ def smoke(app, output):
                     window.navigate("Dashboard")
                     app.processEvents()
                     assert window.grab().save(str(destination / ("theme-" + selected + ".png")))
+                    window.navigate("Welcome")
+                    app.processEvents()
+                    assert window.grab().save(str(destination / ("particle-welcome-" + selected + ".png")))
                     report["themes"].append(selected)
+                from nexis.ui.reactor import ReactorState
+                core = window.welcome.reactor
+                report["particle_core"] = {"count": len(core.particles),
+                    "distribution": "Fibonacci unit sphere, depth sorted perspective",
+                    "tts": "SAPI playback events only; no PCM/RMS amplitude synchronization",
+                    "state_screenshots": "Synthetic state stimuli, not live microphone/provider evidence",
+                    "states": []}
+                for state in ReactorState:
+                    core.set_state(state)
+                    app.processEvents()
+                    assert core.grab().save(str(destination / ("particle-" + state.value + ".png")))
+                    report["particle_core"]["states"].append(state.value)
+                window.set_state("IDLE")
                 panel.reset()
                 panel.save()
                 report["theme_persistence"] = "PASS: isolated temporary settings only"
@@ -252,6 +255,99 @@ def smoke(app, output):
         report_path = destination / "packaged-smoke.json"
         passed = report_path.is_file() and json.loads(report_path.read_text(encoding="utf-8")).get("ok") is True
         return status if passed else 1
+
+
+def onboarding_navigation_check(app, db, destination):
+    """Exercise real native controls with disposable data, including persisted consent."""
+    transitions = []
+
+    def next_page(wizard, keyboard=False):
+        before = wizard.currentId()
+        control = wizard.button(QWizard.NextButton)
+        if keyboard:
+            control.setFocus()
+            QApplication.sendEvent(control, QKeyEvent(QKeyEvent.KeyPress, Qt.Key_Return, Qt.NoModifier))
+            QApplication.sendEvent(control, QKeyEvent(QKeyEvent.KeyRelease, Qt.Key_Return, Qt.NoModifier))
+        else:
+            control.click()
+        app.processEvents()
+        transitions.append({"before": before, "after": wizard.currentId(),
+                            "activation": "Enter" if keyboard else "QPushButton.click"})
+
+    wizard = WelcomeWizard(db)
+    wizard.show()
+    app.processEvents()
+    wizard.grab().save(str(destination / "packaged-welcome.png"))
+    wizard.preferred_name.setText("Package verification")
+    next_page(wizard)
+    wizard.grab().save(str(destination / "packaged-access-disclosure.png"))
+    next_page(wizard)
+    assert wizard.currentId() == 2
+    next_page(wizard)
+    assert wizard.currentId() == 2 and not wizard.button(QWizard.NextButton).isEnabled()
+    wizard.grab().save(str(destination / "acknowledgment-unmet.png"))
+    wizard.access.acknowledged.click()
+    assert wizard.button(QWizard.NextButton).isEnabled()
+    wizard.grab().save(str(destination / "acknowledgment-ready.png"))
+    next_page(wizard, keyboard=True)
+    assert wizard.currentId() == 3
+    wizard.grab().save(str(destination / "acknowledgment-advanced.png"))
+    wizard.reject()
+    assert not db.setting("welcome_completed") and not db.setting("system_access_acknowledged")
+    resumed = WelcomeWizard(db)
+    resumed.show()
+    app.processEvents()
+    assert resumed.currentId() == 3
+    while resumed.currentId() < 5:
+        next_page(resumed)
+    next_page(resumed)
+    assert resumed.currentId() == 5 and "Save a provider" in resumed.api_status.text()
+    resumed.api_setup_choice.setCurrentIndex(resumed.api_setup_choice.findData("later"))
+    resumed.grab().save(str(destination / "packaged-provider-setup.png"))
+    while resumed.currentId() < 8:
+        next_page(resumed)
+    resumed.button(QWizard.FinishButton).click()
+    app.processEvents()
+    assert resumed.result() == QWizard.Accepted and db.setting("welcome_completed")
+    assert not any(db.setting("access_permissions").values())
+    restarted = Database(db.path)
+    assert restarted.setting("welcome_completed") and restarted.setting("system_access_acknowledged")
+    restarted.close()
+    existing = Database(db.path.parent / "persisted-ack-fixture.db")
+    try:
+        existing.set_setting("system_access_acknowledged", True)
+        existing.set_setting("history_enabled", False)
+        existing.set_setting("access_permissions", {
+            key: key != "terminal_commands" for key in existing.setting("access_permissions")
+        })
+        upgrade = WelcomeWizard(existing)
+        upgrade.show()
+        upgrade.preferred_name.setText("Upgrade fixture")
+        next_page(upgrade)
+        next_page(upgrade)
+        assert upgrade.currentId() == 2 and upgrade.button(QWizard.NextButton).isEnabled()
+        upgrade.access.acknowledged.click()
+        next_page(upgrade)
+        assert upgrade.currentId() == 2 and not upgrade.button(QWizard.NextButton).isEnabled()
+        upgrade.grab().save(str(destination / "saved-permissions-unchecked-blocked.png"))
+        upgrade.access.acknowledged.click()
+        assert upgrade.button(QWizard.NextButton).isEnabled()
+        assert all(field.isChecked() for field in upgrade.access.choices.values() if field.isEnabled())
+        upgrade.grab().save(str(destination / "saved-permissions-checked-ready.png"))
+        next_page(upgrade)
+        assert upgrade.currentId() == 3
+        upgrade.grab().save(str(destination / "persisted-ack-advanced.png"))
+        upgrade.reject()
+        assert not existing.setting("history_enabled")
+    finally:
+        existing.close()
+    return {"status": "PASS", "driver": "Native Qt controls and Enter key events; automated, not a human acceptance test",
+            "qt_platform": app.platformName(), "transitions": transitions,
+            "interruption_resumed_at": 3, "optional_grants_denied": True,
+            "persisted_ack_advanced": True, "restart_completion_preserved": True,
+            "unchecked_consent_blocked_with_saved_grants": True,
+            "checked_consent_advanced_with_saved_grants": True,
+            "existing_profile_preference_preserved": True}
 
 
 def latest_feature_check(window, db):

@@ -72,9 +72,12 @@ class Management:
                 "Delete all NEXIS data",
                 "Local NEXIS database",
                 "Erase saved conversations, snippets, workflows, shortcuts, history, memories, indexed text and settings; "
-                "disable Windows startup. This cannot be undone.",
+                "erase update recovery snapshots and disable Windows startup. This cannot be undone.",
                 Risk.HIGH,
             )
         )
+        from nexis.core.update_service import erase_recovery
+
+        erase_recovery(self.db.path.parent / "updates")
         self.platform.set_startup(False)
         self.db.reset()

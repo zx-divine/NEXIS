@@ -17,6 +17,7 @@ class WakeListening(QObject):
         self.desktop, self.window = desktop, desktop.window
         self.worker, self.jobs = None, []
         self.active, self.blocked, self.suspended = False, False, True
+        self.microphone_active = False
         self.cooldown = 0
         self.configuration = None
         self.timer = QTimer(self)
@@ -29,6 +30,7 @@ class WakeListening(QObject):
         self.refresh()
 
     def pause(self):
+        self.microphone_active = False
         self.suspended = True
         self.cooldown = monotonic() + .6
         if self.worker:
@@ -116,7 +118,11 @@ class WakeListening(QObject):
             if active():
                 self.show_status(text)
                 if text.startswith(('HEY NEXIS', 'LISTENING')):
+                    self.microphone_active = True
                     self.window.set_state('LISTENING')
+                elif text.startswith(('Wake microphone off', 'No command heard')):
+                    self.microphone_active = False
+                    self.window.set_state('PROCESSING' if pending else 'IDLE')
 
         def awakened():
             if active():
@@ -127,11 +133,13 @@ class WakeListening(QObject):
 
         def failed(message):
             if active():
+                self.microphone_active = False
                 self.blocked = True
                 self.show_status(message + ' Use Retry wake listening after fixing the issue.')
                 self.window.set_state('ERROR')
 
         def finished():
+            self.microphone_active = False
             if not active():
                 return
             self.cooldown = monotonic() + 1
@@ -159,6 +167,7 @@ class WakeListening(QObject):
         worker.finished.connect(finished)
         def cleanup():
             if self.worker is worker:
+                self.microphone_active = False
                 self.worker = None
             if worker in self.jobs:
                 self.jobs.remove(worker)

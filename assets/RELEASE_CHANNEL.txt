@@ -1,0 +1,13 @@
+Nexis v1 — NEXIS v1.4.1 Development Candidate (Windows version 1.4.1)
+Creator: ASH
+
+This is a personal test candidate, not an approved full-feature public release.
+Product/package name: Nexis v1. Development build label: NEXIS v1.4.1.
+Significant changes advance the middle number (1.4 to 1.5). Small changes advance
+the last number (1.4 to 1.4.1). Windows stores three numeric parts, so v1.4 is
+1.4.0. This consent hotfix advances it to 1.4.1; upgrade order stays monotonic.
+The public semantic target remains 1.0.0, subject to mandatory release gates.
+Do not reset Windows file versions to 1.0.0 during a public-name transition.
+Earlier 1.3.x distributions remain preserved separately and are not renamed.
+Original NEXIS code is proprietary — All Rights Reserved. The EULA is a draft
+for review. Third-party components retain their separate license terms.

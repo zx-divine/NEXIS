@@ -55,6 +55,7 @@ class SettingsPage(QWidget):
             return content
 
         general = section("General")
+        self.general_layout = general
         form = QFormLayout()
         self.preferred_name = QLineEdit(window.db.setting("preferred_name"))
         self.preferred_name.setMaxLength(80)
@@ -312,6 +313,7 @@ class SettingsPage(QWidget):
         if self.window.files.worker and self.window.files.worker.isRunning():
             raise ValueError("Cancel file search and wait for it to finish before deleting data.")
         self.management().delete_all()
+        self.window.updates_page.forget_staged_view()
         self.provider.cancel_jobs()
         self.provider.manager.path.unlink(missing_ok=True)
         self.provider.manager.legacy.delete()

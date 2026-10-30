@@ -1,29 +1,78 @@
-# Local environments, caches and private data
 .venv/
-venv/
 __pycache__/
 *.pyc
 .pytest_cache/
 .ruff_cache/
-*.egg-info/
 build/
 dist/
-.env*
-*.dpapi
+*.egg-info/
 *.db*
-*.sqlite*
-*.wav
-*.mp3
+*.log*
+.dev-deps/
+.dev-deps-*/
+.verification-temp/
+.packaging-work/
+.packaging-cache/
+.verification-resumed-temp/
+
+.packaging-work-v11/
+.verification-v11*/
+
+# Private development runtimes, QA data and generated artifacts
+.provider-deps/
+.tool-deps/
+.tool-runtime/
+.tools/
+.packaging-work*/
+.verification-*/
+assets/models/vosk-model-*/
+assets/model-downloads/
+**/*.dpapi
+**/*.wav
+**/*.mp3
+**/.env*
+**/*config.local*
+docs/installer-overhaul/*.json
+docs/installer-overhaul/*.txt
+docs/installer-overhaul/*.log
+
+# Never stage private signing material or local credentials
 *.pfx
 *.p12
 *.key
 *.pem
-*.log*
+.env
+
+# Keep machine-specific verification records and design references local.
+NEXIS_ONLINE_OPERATOR_VERIFICATION.md
+design/
+docs/*
+!docs/ARCHITECTURE.md
+!docs/EXTENDING_COMMANDS.md
+!docs/SECURITY_REVIEW.md
+!docs/TESTING.md
+!docs/BRANDING.md
+!docs/RELEASE.md
+!docs/INSTALLER_PERMISSION_OVERHAUL.md
+
+!docs/LAUNCH_UPGRADE_FINDINGS.md
+!docs/GOD_MODE_HANDOFF.md
+
+!docs/LAUNCH_PREPARATION.md
+!docs/ASCENSION_*.md
+!docs/NEXIS_V1_*.md
+
+# Release binaries and machine-specific milestone evidence are never source inputs.
+Release Nexis/
+.verification-*.txt
+
+# Source publication excludes compiled packages and legacy release bundles.
+venv/
 *.exe
 *.dll
 *.pyd
 *.zip
+*.sqlite*
 *.mdl
 *.fst
-assets/models/vosk-model-*/
-.verification-*/
+NEXIS LAUNCH/

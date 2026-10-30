@@ -48,9 +48,153 @@
       ]
     },
     {
+      "file": "scaled/NEXIS-symbol-16.png",
+      "role": "N symbol for shell and release assets",
+      "sha256": "ce0c04ece7ceb50ebfd3f9ef70fc68809f57ee9234cedf06263f2d4ea97054d6",
+      "pixels": [
+        16,
+        16
+      ]
+    },
+    {
+      "file": "scaled/NEXIS-symbol-20.png",
+      "role": "N symbol for shell and release assets",
+      "sha256": "c8442de04029ca32d20819acc095fe0b1ef635bf1cfdb216056dcf659a8cb2b5",
+      "pixels": [
+        20,
+        20
+      ]
+    },
+    {
+      "file": "scaled/NEXIS-symbol-24.png",
+      "role": "N symbol for shell and release assets",
+      "sha256": "692d0eb0938a810e5ad27a2077717002c4bb39fb6d6fafc7edbb7f40916eabeb",
+      "pixels": [
+        24,
+        24
+      ]
+    },
+    {
+      "file": "scaled/NEXIS-symbol-32.png",
+      "role": "N symbol for shell and release assets",
+      "sha256": "ea08c0c217ae33927f11ced2bf668ec9940ebc77b94cd7f2cd018e88ba98fdb9",
+      "pixels": [
+        32,
+        32
+      ]
+    },
+    {
+      "file": "scaled/NEXIS-symbol-40.png",
+      "role": "N symbol for shell and release assets",
+      "sha256": "7f5176b45c1c7b0ffcbb67c58bee37c30d2fd7f9ff31e4044badfe7080d83fc9",
+      "pixels": [
+        40,
+        40
+      ]
+    },
+    {
+      "file": "scaled/NEXIS-symbol-48.png",
+      "role": "N symbol for shell and release assets",
+      "sha256": "1fdd40ab712e479886824ee10b4174d9b80641ea84e1bc92be35d0e39f2e88d5",
+      "pixels": [
+        48,
+        48
+      ]
+    },
+    {
+      "file": "scaled/NEXIS-symbol-64.png",
+      "role": "N symbol for shell and release assets",
+      "sha256": "3051e5c5108fd55cfa481fc0f0f5ca4dc973647883a2b963dc1fcc990414a984",
+      "pixels": [
+        64,
+        64
+      ]
+    },
+    {
+      "file": "scaled/NEXIS-symbol-96.png",
+      "role": "N symbol for shell and release assets",
+      "sha256": "5b767c64cc43a1b6b1a22314b5773fa96e5e68704e18549b498c79d5f5621ed7",
+      "pixels": [
+        96,
+        96
+      ]
+    },
+    {
+      "file": "scaled/NEXIS-symbol-128.png",
+      "role": "N symbol for shell and release assets",
+      "sha256": "3c5b457767fd0a9a7a8708322c1a7021b63fd07c45a65c145ffac900685bba7e",
+      "pixels": [
+        128,
+        128
+      ]
+    },
+    {
+      "file": "scaled/NEXIS-symbol-256.png",
+      "role": "N symbol for shell and release assets",
+      "sha256": "969b42b7309c27f39253e4e9a263976aecb972e74b850e247991e902c06de193",
+      "pixels": [
+        256,
+        256
+      ]
+    },
+    {
+      "file": "scaled/NEXIS-symbol-512.png",
+      "role": "N symbol for shell and release assets",
+      "sha256": "af26a1961fd1cf61d8b0c0280227931f233b5cfb7e9e06496986b144b045e309",
+      "pixels": [
+        512,
+        512
+      ]
+    },
+    {
+      "file": "scaled/NEXIS-logo-128.png",
+      "role": "full artwork for documentation and release assets",
+      "sha256": "4c0267f59da04e1542c22599dc9d2edf5ecaa0890e54cf5b2fff9e82976da886",
+      "pixels": [
+        128,
+        128
+      ]
+    },
+    {
+      "file": "scaled/NEXIS-logo-256.png",
+      "role": "full artwork for documentation and release assets",
+      "sha256": "73a8e135534e6044c32c6ff486a2367e9df9f1d93e10261249ebcf50d6e40597",
+      "pixels": [
+        256,
+        256
+      ]
+    },
+    {
+      "file": "scaled/NEXIS-logo-512.png",
+      "role": "full artwork for documentation and release assets",
+      "sha256": "01154c0340c729b51d8a43554cbd916ec98f9d4b7b6af0d7c6313486191afa72",
+      "pixels": [
+        512,
+        512
+      ]
+    },
+    {
+      "file": "scaled/NEXIS-logo-1024.png",
+      "role": "full artwork for documentation and release assets",
+      "sha256": "117310ff89fc24f4a1b4492595d41bea8df5d2ad1c1d6ae5762e4c8c6ab5ca92",
+      "pixels": [
+        1024,
+        1024
+      ]
+    },
+    {
       "file": "NEXIS.ico",
       "role": "Windows multi-resolution N symbol",
       "sha256": "18cc9b24a9590e614766f5afd58e7bc224bea395bc98bf4a3f3abf706f12b75f"
+    },
+    {
+      "file": "installer-sidebar.png",
+      "role": "installer full artwork sidebar",
+      "sha256": "58e0bfd15f1ec25c3710903346a08c43df7fdaffe9ad7e86c644f19f64874e21",
+      "pixels": [
+        492,
+        942
+      ]
     }
   ]
 }

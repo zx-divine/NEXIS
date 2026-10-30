@@ -30,10 +30,10 @@ def test_semantic_versions_and_missing_public_release():
 
 
 def test_first_public_stable_is_offered_to_internal_launch_candidate():
-    # Engineering 1.3.x must not suppress the first public v1.0.0 release.
-    data = release(tag_name="v1.0.0", html_url="https://github.com/zx-divine/nexis/releases/tag/v1.0.0")
+    # This legacy discovery helper cannot install; production uses signed build versions.
+    data = release(tag_name="v1.1.0", html_url="https://github.com/zx-divine/nexis/releases/tag/v1.1.0")
     assert parse_release(data)["available"]
-    assert not parse_release(data, "1.0.0")["available"]
+    assert not parse_release(data, "1.1.0")["available"]
 
 
 def test_stable_channel_does_not_offer_same_public_version(monkeypatch):

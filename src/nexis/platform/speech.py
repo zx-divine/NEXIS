@@ -151,11 +151,28 @@ class SpeechService(QThread):
                             self.playback_finished.emit(identifier, "CANCELLED")
                             continue
                         speaker.Speak(text, 3 | 16)
-                        self.playback_started.emit(identifier)
+                        playback_announced = False
+
+                        def announce_playback():
+                            nonlocal playback_announced
+                            if playback_announced or generation != self.generation or self.cancel.is_set():
+                                return
+                            try:
+                                # SAPI's speaking state, not merely a queued say()
+                                # request. This is activity, never PCM amplitude.
+                                speaking = int(speaker.Status.RunningState) == 2
+                            except Exception:
+                                speaking = False
+                            if speaking:
+                                playback_announced = True
+                                self.playback_started.emit(identifier)
+
+                        announce_playback()
                         deadline = monotonic() + 120
                         outcome = "PASS"
                         while not speaker.WaitUntilDone(50):
                             pythoncom.PumpWaitingMessages()
+                            announce_playback()
                             if (
                                 self.cancel.is_set()
                                 or self.purge.is_set()

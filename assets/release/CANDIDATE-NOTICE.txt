@@ -1,0 +1,19 @@
+Nexis v1 — NEXIS v1.4.1 DEVELOPMENT CANDIDATE — WINDOWS BUILD 1.4.1
+
+This is the newest rebuilt application packaged for ASH's personal installation
+and testing. It is not the older 1.3.4 launch candidate and is not final 1.0.0.
+
+Full-feature public release is NOT READY. Local wake phrase listening is
+implemented but partially verified. Dictation, automatic barge-in and several
+productivity/integration features remain unfinished.
+Real microphone/speaker, live providers, clean Windows and upgrade/uninstall
+qualification remain separate checks. Read KNOWN-LIMITATIONS.md.
+
+Original NEXIS code is proprietary. Copyright © 2026 NEXIS. All Rights Reserved.
+The proposed EULA remains a draft for review. No public redistribution is
+authorized. Third-party software retains its own license rights.
+
+Installing with the normal installer can upgrade an existing NEXIS installation.
+Application data is separate from program files. Preserve your original profile
+and backups. This candidate uses schema 5; older builds may reject an upgraded
+database. The app never needs a separately installed Python runtime.

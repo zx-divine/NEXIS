@@ -30,6 +30,10 @@ def main():
             return 2
         return smoke(app, sys.argv[index + 1])
     directory = Path(QStandardPaths.writableLocation(QStandardPaths.AppLocalDataLocation))
+    if "--apply-update" in sys.argv:
+        from nexis.platform.update_install import helper_main
+
+        return helper_main(directory)
     try:
         directory.mkdir(parents=True, exist_ok=True)
     except OSError:
@@ -66,11 +70,7 @@ def main():
             db.close()
             lock.unlock()
             return 0
-        window.refresh()
-        window.settings_page.provider.reload_saved()
-        window.settings_page.reload_profile()
-        window.apply_theme()
-        window.show_launch_mode()
+        window.onboarding_finished()
     if db.setting("start_minimised") or "--minimised" in sys.argv:
         window.showMinimized()
     elif db.setting("start_maximized"):

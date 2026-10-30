@@ -3,4 +3,5 @@ setuptools>=84.1.0,<85
 pytest>=8,<10
 pytest-qt>=4.4,<5
 ruff>=0.9,<1
+pyinstaller>=6.11,<7
 Pillow>=11,<13

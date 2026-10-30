@@ -13,7 +13,7 @@ def test_no_default_orb_microphone_or_update_request(qtbot, db, tmp_path, platfo
     qtbot.addWidget(window)
     assert window.desktop_experience.orb is None
     assert not window.desktop_experience.timer.isActive()
-    assert not window.updates_page.automatic.isChecked() and not window.updates_page.jobs
+    assert window.updates_page.automatic.isChecked() and not window.updates_page.jobs
     assert not window.voice.worker and not window.screen_awareness.image
     assert not window.updates_page.download_button.isEnabled()
     window.close()
@@ -69,16 +69,17 @@ def test_manual_and_ai_requests_do_not_overlap(qtbot, db, tmp_path, platform):
     window.close()
 
 
-def test_update_automatic_check_is_daily_opt_in_and_downloads_stay_disabled_without_releases(qtbot, db, tmp_path, platform, monkeypatch):
+def test_update_automatic_check_is_daily_and_downloads_stay_disabled_without_releases(qtbot, db, tmp_path, platform, monkeypatch):
     window = MainWindow(db, tmp_path, platform)
     qtbot.addWidget(window)
     page, calls = window.updates_page, []
-    monkeypatch.setattr("nexis.ui.updates_page.check_updates", lambda cancel: calls.append(1) or {"available": False, "tag": "", "page": "", "notes": "No release", "assets": []})
+    monkeypatch.setattr(page.service, "check", lambda cancel: calls.append(1) and None)
+    page.automatic.setChecked(False)
     page.auto_check_if_due()
     assert not calls
     page.automatic.setChecked(True)
     page.auto_check_if_due()
-    qtbot.waitUntil(lambda: bool(page.release), timeout=3000)
+    qtbot.waitUntil(lambda: bool(calls) and not page.busy(), timeout=3000)
     page.auto_check_if_due()
     assert calls == [1] and not page.download_button.isEnabled()
     window.close()

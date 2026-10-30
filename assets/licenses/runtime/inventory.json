@@ -216,6 +216,16 @@
       "review": "Owner must review applicable redistribution/source obligations"
     },
     {
+      "name": "securesystemslib",
+      "version": "1.4.0",
+      "declared_license": "MIT",
+      "notice_files": [
+        "securesystemslib/securesystemslib-1.4.0.dist-info_licenses_LICENSE",
+        "securesystemslib/securesystemslib__vendor_ed25519_LICENSE"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
       "name": "Send2Trash",
       "version": "2.1.0",
       "declared_license": "BSD-3-Clause",
@@ -275,6 +285,16 @@
       "declared_license": "MPL-2.0 AND MIT",
       "notice_files": [
         "tqdm/tqdm-4.70.1.dist-info_licenses_LICENCE"
+      ],
+      "review": "Owner must review applicable redistribution/source obligations"
+    },
+    {
+      "name": "tuf",
+      "version": "7.0.1",
+      "declared_license": "Apache-2.0 OR MIT",
+      "notice_files": [
+        "tuf/tuf-7.0.1.dist-info_licenses_LICENSE",
+        "tuf/tuf-7.0.1.dist-info_licenses_LICENSE-MIT"
       ],
       "review": "Owner must review applicable redistribution/source obligations"
     },

@@ -1,5 +1,8 @@
 """The original artwork, scaled without cropping or recolouring."""
 
+import logging
+import sqlite3
+
 from PySide6.QtCore import Qt, QTimer, QEvent
 from PySide6.QtGui import QPixmap, QGuiApplication
 from PySide6.QtWidgets import (
@@ -78,6 +81,11 @@ class WelcomeWizard(QWizard):
         self.db, self.jobs, self.speech = db, [], None
         self.microphone_worker = None
         self._closing_setup = False
+        self._completed_setup = False
+        self._resume_page = 0
+        self._resume_timer = QTimer(self)
+        self._resume_timer.setSingleShot(True)
+        self._resume_timer.timeout.connect(self.commit_completion)
         self._appearance_before = (db.setting("theme"), db.setting("custom_theme"))
         self.setWindowTitle("NEXIS")
         self.setWindowIcon(application_icon())
@@ -103,7 +111,8 @@ class WelcomeWizard(QWizard):
         self.identity_status.setWordWrap(True)
         identity_layout.addWidget(self.identity_status)
         self.page_with("NEXIS — SYSTEM ACCESS & CONTROL", DISCLOSURE + "\n\nAdministrator access: installing software, changing protected system settings or accessing protected locations may need Windows UAC. NEXIS runs as your normal user. Privileged actions are currently handed off to Windows; the entire app is never permanently elevated.")
-        permissions = QWizardPage()
+        permissions = AcknowledgmentPage()
+        self.access_page = permissions
         permissions.setTitle("Choose system access")
         layout = QVBoxLayout(permissions)
         self.access = SystemAccessPanel(db, show_buttons=False)
@@ -117,7 +126,12 @@ class WelcomeWizard(QWizard):
         screen_notice.setWordWrap(True)
         body_layout.addWidget(screen_notice)
         self.scroll(layout, body)
-        permissions.registerField("accessAcknowledged*", self.access.acknowledged)
+        # A Qt mandatory field compares against its INITIAL value. An initially
+        # checked persisted acknowledgment can therefore never complete the page.
+        permissions.acknowledgment = self.access.acknowledged
+        self.access.acknowledged.toggled.connect(permissions.completeChanged)
+        self.access.acknowledged.toggled.connect(self.acknowledgment_feedback)
+        self.acknowledgment_feedback()
         self.addPage(permissions)
         mic, mic_layout = self.page_with(
             "Microphone detection and speech model",
@@ -215,6 +229,69 @@ class WelcomeWizard(QWizard):
         self.button(QWizard.CustomButton1).setAccessibleName("Open setup settings")
         self.customButtonClicked.connect(self.open_setup_settings)
         self.currentIdChanged.connect(self.page_changed)
+        self.restore_progress()
+
+    def acknowledgment_feedback(self):
+        message = (
+            "Acknowledgment complete. All capability grants below are optional; Next continues setup."
+            if self.access.acknowledged.isChecked() else
+            "Required: check ‘I understand’ to enable Next. Capability grants below are optional."
+        )
+        # Keep the requirement visible even when capability choices need scrolling.
+        self.access_page.setSubTitle(message)
+        self.access.status.setText(message)
+
+    def go_to_page(self, page_id):
+        # Available on the supported Qt runtime; Back preserves unregistered inputs.
+        self.setCurrentId(page_id)
+
+    def restore_progress(self):
+        draft = self.db.setting("onboarding_progress")
+        if self.db.setting("welcome_completed") or not draft:
+            return
+        try:
+            name = preferred_name(draft.get("name", ""))
+            page = draft.get("page", 0)
+            if type(page) is not int or not 0 <= page <= 8:
+                return
+            self.preferred_name.setText(name)
+            self.access.acknowledged.setChecked(draft.get("acknowledged") is True)
+            grants = draft.get("grants", {})
+            for key, field in self.access.choices.items():
+                field.setChecked(grants.get(key) is True and field.isEnabled())
+            self.screen_enabled.setChecked(draft.get("screen") is True)
+            self.api_setup_choice.setCurrentIndex(self.api_setup_choice.findData(
+                "later" if draft.get("api") == "later" else "configured"))
+            if page > 2 and not self.access.acknowledged.isChecked():
+                page = 2
+            if page > 5 and not self.validate_api_choice():
+                page = 5
+            self._resume_page = page
+        except (ValueError, TypeError, AttributeError):
+            logging.getLogger(__name__).warning("Invalid onboarding checkpoint; restarting review")
+
+    def checkpoint(self, page_id):
+        if self._closing_setup or self._completed_setup or page_id < 0:
+            return
+        # A draft is never an effective capability grant or a completion flag.
+        self.db.set_setting("onboarding_progress", {
+            "page": page_id, "name": self.preferred_name.text(),
+            "acknowledged": self.access.acknowledged.isChecked(),
+            "grants": {key: field.isChecked() for key, field in self.access.choices.items()},
+            "screen": self.screen_enabled.isChecked(), "api": self.api_setup_choice.currentData(),
+        })
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if self._resume_page:
+            page, self._resume_page = self._resume_page, 0
+            # Recreate the validated navigation history, so Back still reaches
+            # consent and settings after an interrupted first launch.
+            for _ in range(page):
+                before = self.currentId()
+                self.next()
+                if self.currentId() == before:
+                    break
 
     def apply_theme(self, selected=None, custom=None):
         from nexis.ui.themes import apply
@@ -296,6 +373,10 @@ class WelcomeWizard(QWizard):
             self.microphone_worker.cancel.set()
         if page_id != 4 and self.speech:
             self.speech.stop_speaking()
+        try:
+            self.checkpoint(page_id)
+        except (OSError, sqlite3.Error, ValueError):
+            self.show_setup_error("Setup progress could not be saved. Check disk space and folder access, then retry.")
 
     def validateCurrentPage(self):
         if self.currentId() == 0:
@@ -304,6 +385,9 @@ class WelcomeWizard(QWizard):
             except ValueError as exc:
                 self.identity_status.setText(str(exc))
                 return False
+        if self.currentId() == 2 and not self.access.acknowledged.isChecked():
+            self.acknowledgment_feedback()
+            return False
         if self.currentId() == self.provider_page_id and not self.validate_api_choice():
             return False
         return super().validateCurrentPage()
@@ -493,44 +577,89 @@ class WelcomeWizard(QWizard):
             job.cancel.set()
 
     def accept(self):
+        if self._closing_setup or self._completed_setup:
+            return
         try:
-            name = preferred_name(self.preferred_name.text())
+            preferred_name(self.preferred_name.text())
             if not self.appearance.preview():
                 return
         except ValueError as exc:
             self.identity_status.setText(str(exc))
-            self.restart()
+            self.go_to_page(0)
             return
         if not self.validate_api_choice():
-            self.setCurrentId(self.provider_page_id)
+            self.go_to_page(self.provider_page_id)
             return
         if self.wake_word.isChecked() and (not self.always_active.isChecked() or not self.access.choices['microphone_access'].isChecked()):
             self.api_status.setText('Hey NEXIS needs Always Active and an explicit Microphone access grant. Enable them or turn wake listening off.')
-            self.setCurrentId(self.provider_page_id)
+            self.go_to_page(self.provider_page_id)
+            return
+        if not self.access.acknowledged.isChecked():
+            self.go_to_page(2)
+            self.acknowledgment_feedback()
             return
         self._closing_setup = True
+        self.button(QWizard.FinishButton).setEnabled(False)
+        self.commit_completion()
+
+    def show_setup_error(self, message):
+        if self.currentPage():
+            self.currentPage().setSubTitle(message)
+        logging.getLogger(__name__).error(message)
+
+    def commit_completion(self):
         self.stop_jobs()
         if self.active_jobs():
-            QTimer.singleShot(100, self.accept)
+            self.currentPage().setSubTitle("Stopping setup tests safely…")
+            self._resume_timer.start(100)
             return
-        if not self.access.save():
+        try:
+            # The user can navigate while an optional test is stopping. Recheck
+            # live requirements at the commit boundary, not just at Finish click.
+            if not self.access.acknowledged.isChecked():
+                raise ValueError("Select I understand on Choose system access before finishing.")
+            if not self.validate_api_choice():
+                raise ValueError("Save a provider and model, or select Manual / Offline for now.")
+            if self.wake_word.isChecked() and (not self.always_active.isChecked()
+                    or not self.access.choices["microphone_access"].isChecked()):
+                raise ValueError("Wake listening needs an explicit microphone grant")
+            selected = self.appearance.theme.currentData()
+            values = {
+                "system_access_acknowledged": True,
+                "access_permissions": {key: field.isChecked() for key, field in self.access.choices.items()},
+                "history_enabled": self.history.isChecked(), "reduced_motion": self.motion.isChecked(),
+                "preferred_name": preferred_name(self.preferred_name.text()),
+                "ai_setup_choice": self.api_setup_choice.currentData(),
+                "floating_orb_enabled": self.always_active.isChecked(),
+                "wake_word_enabled": self.wake_word.isChecked(),
+                "screen_awareness_enabled": self.screen_enabled.isChecked(),
+                "theme": selected,
+                "custom_theme": self.appearance.values() if selected == "custom" else self.db.setting("custom_theme"),
+                "onboarding_progress": {}, "welcome_completed": True,
+            }
+            if self.always_active.isChecked():
+                values["minimize_to_tray"] = True
+            self.db.set_settings(values)
+        except (OSError, sqlite3.Error, ValueError) as exc:
             self._closing_setup = False
-            self.setCurrentId(2) if hasattr(self, "setCurrentId") else self.restart()
+            self.button(QWizard.FinishButton).setEnabled(True)
+            if isinstance(exc, ValueError):
+                self.show_setup_error("Review setup requirements: " + str(exc))
+            else:
+                self.show_setup_error("Setup could not be saved. Check free space and local folder permissions, then click Open NEXIS to retry. Your profile was preserved.")
             return
-        self.db.set_setting("history_enabled", self.history.isChecked())
-        self.db.set_setting("reduced_motion", self.motion.isChecked())
-        self.db.set_setting("preferred_name", name)
-        self.db.set_setting('ai_setup_choice', self.api_setup_choice.currentData())
-        self.db.set_setting('floating_orb_enabled', self.always_active.isChecked())
-        self.db.set_setting('wake_word_enabled', self.wake_word.isChecked())
-        if self.always_active.isChecked():
-            self.db.set_setting('minimize_to_tray', True)
-        self.db.set_setting("screen_awareness_enabled", self.screen_enabled.isChecked())
-        self.db.set_appearance(self.appearance.theme.currentData(), self.appearance.values() if self.appearance.theme.currentData() == "custom" else self.db.setting("custom_theme"))
-        self.db.set_setting("welcome_completed", True)
+        self._completed_setup = True
         super().accept()
 
     def reject(self):
+        if self._completed_setup:
+            return
+        self._resume_timer.stop()
+        if not self._closing_setup:
+            try:
+                self.checkpoint(self.currentId())
+            except (OSError, sqlite3.Error, ValueError):
+                pass
         self._closing_setup = True
         self.stop_jobs()
         if self.active_jobs():
@@ -540,3 +669,10 @@ class WelcomeWizard(QWizard):
 
         apply(*self._appearance_before)
         super().reject()
+
+
+class AcknowledgmentPage(QWizardPage):
+    """Completion depends on consent itself, including consent already persisted."""
+
+    def isComplete(self):
+        return hasattr(self, "acknowledgment") and self.acknowledgment.isChecked()

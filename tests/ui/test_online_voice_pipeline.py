@@ -11,6 +11,7 @@ from nexis.ui.main_window import MainWindow
 
 
 class FakeSpeech(QObject):
+    playback_started = Signal(str)
     playback_finished = Signal(str, str)
     finished = Signal()
 
@@ -28,6 +29,7 @@ class FakeSpeech(QObject):
     def say(self, text):
         self.spoken.append(text)
         identifier = uuid4().hex
+        QTimer.singleShot(0, lambda: self.playback_started.emit(identifier))
         QTimer.singleShot(30, lambda: self.playback_finished.emit(identifier, "PASS"))
         return identifier
 

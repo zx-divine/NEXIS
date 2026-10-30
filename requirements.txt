@@ -8,3 +8,7 @@ Send2Trash==2.1.0
 websocket-client==1.9.0
 webrtcvad-wheels==2.0.14
 certifi==2026.10.19
+tuf==7.0.1
+securesystemslib==1.4.0
+cryptography==50.0.2
+urllib3==2.8.0

@@ -1,12 +1,12 @@
-# NEXIS V1 — application source
+# NEXIS 1.1 — application source
 
-Latest development-candidate application source: **1.0.0**. The intended public
-V1 target is 1.0.0; the full product is **READY** for a final public release.
+Public update target: **1.1.0**. Current engineering build: **1.4.2** (development candidate). Engineering versions stay monotonic and are separate from public version names.
 
-This repository contains application code, tests, required approved branding,
-dependency declarations and license notices. Windows installers, portable ZIPs,
-launcher/bootstrap files, packaging scripts, old release folders, private profiles,
-API credentials and local verification recordings are excluded.
+This repository contains the application source, tests, build/installer tooling, approved branding, dependency declarations and license notices. Installers, portable archives, voice model weights, private profiles, credentials, signing private keys and machine-specific verification recordings are excluded.
+
+The Windows updater uses python-tuf with Ed25519-signed metadata and the existing per-user Inno Setup installer. Settings → General → Software Updates includes automatic checks/download preferences, manual checks and Restart & Install. Signed packages are verified before installation; active work blocks restart and a profile recovery snapshot is retained.
+
+A signed 1.4.2 → 1.4.3 upgrade and restart was demonstrated with isolated test identities/keys and a loopback HTTPS fixture. The final source regression passed **667 tests, with 2 skipped**. Production GitHub feed delivery, Authenticode signing and clean Windows 10/11 qualification remain pending. Publishing this source does not publish a binary release or signed update feed. See the [update guide](assets/release/UPDATE-GUIDE.md) and [update release notes](assets/release/UPDATE-RELEASE-NOTES.md).
 
 ## Current functionality
 
@@ -48,12 +48,11 @@ python -m ruff check src tests
 ```
 
 Tests use synthetic temporary profiles and mocked platform/provider boundaries.
-Packaging-only tests were excluded with the removed packaging project files;
-application, permission, branding and wake lifecycle tests remain.
+Packaging and updater tests are included. Native upgrade qualification uses separate QA identities/profiles.
 
 ## Limits and privacy
 
-See [SECURITY.md](SECURITY.md) and [current feature limits](docs/KNOWN-LIMITATIONS.md).
+See [SECURITY.md](SECURITY.md) and [current feature limits](assets/release/KNOWN-LIMITATIONS.md).
 Live AI accounts, human microphone/audibility, real-room wake false activations,
 long sessions, device recovery and clean Windows lifecycle require further testing.
 One uninterrupted wake-plus-command sentence and automatic speech barge-in are not

@@ -1,4 +1,6 @@
-"""Risk-based executable launch consent. Installer execution remains sensitive."""
+"""Regressions for complete offline packages and risk-based launch consent."""
+import importlib.util
+import json
 import os
 import shutil
 from pathlib import Path
@@ -8,6 +10,7 @@ import pytest
 
 from nexis.core.catalog import Catalog
 from nexis.core.launch_policy import launch_risk
+from nexis.core.models import detect_model, MODEL
 from nexis.core.permissions import Permissions
 from nexis.core.results import Risk
 from nexis.core.router import Engine
@@ -110,8 +113,26 @@ def test_fake_installed_binary_cannot_become_low_risk(tmp_path, monkeypatch):
         launch_risk(bad)
 
 
+def test_bundled_model_is_found_without_saved_path_or_network(tmp_path):
+    root = Path(__file__).resolve().parents[2]
+    model = root / "assets/models" / MODEL["id"]
+    if not model.is_dir():
+        pytest.skip("Source checkout needs prepare_model.py --download; release build requires it")
+    assert Path(detect_model("", tmp_path)) == model.resolve()
+    spec = importlib.util.spec_from_file_location("nexis_build_model", root / "scripts/prepare_model.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    manifest = json.loads((root / "assets/models/manifest.json").read_text())
+    assert module.verify_model(model, manifest) == manifest["bytes"]
 
 
+def test_build_preflight_rejects_missing_model_file(tmp_path):
+    root = Path(__file__).resolve().parents[2]
+    spec = importlib.util.spec_from_file_location("nexis_build_check", root / "scripts/prepare_model.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    with pytest.raises(ValueError, match="Missing"):
+        module.verify_model(tmp_path, {"model": MODEL, "files": {"am/final.mdl": "bad"}})
 
 
 def test_installed_elevated_program_still_requires_review(tmp_path, monkeypatch, db):
@@ -135,3 +156,12 @@ def test_installation_directory_keeps_fresh_review(tmp_path, monkeypatch, db, pl
     assert not platform.calls
     assert ToolExecutor(db, tmp_path, platform, lambda preview: True).run(step, Event())["request_accepted"]
     assert platform.calls[0][0] == "folder"
+
+
+def test_packaging_hook_uses_installed_vad_wheel_metadata():
+    import runpy
+    root = Path(__file__).resolve().parents[2]
+    hook = runpy.run_path(str(root / "scripts/pyinstaller_hooks/hook-webrtcvad.py"))
+    assert "_webrtcvad" in hook["hiddenimports"]
+    assert any("webrtcvad_wheels" in str(destination) and Path(source).exists()
+               for source, destination in hook["datas"])

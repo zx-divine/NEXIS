@@ -10,6 +10,7 @@ from nexis.core.themes import THEMES, CUSTOM_DEFAULT, theme_id, validate_custom
 
 DEFAULTS = {
     "welcome_completed": False,
+    "onboarding_progress": {},
     "preferred_name": "",
     "default_launch_mode": "welcome",
     "global_launcher_enabled": True,
@@ -42,8 +43,10 @@ DEFAULTS = {
     "minimize_to_tray": False,
     "orb_position": [],
     "orb_always_on_top": True,
-    "update_checks_enabled": False,
+    "update_checks_enabled": True,
+    "update_downloads_enabled": True,
     "update_last_check": "",
+    "update_remind_after": "",
     "mic_sensitivity": 100,
     "mic_noise_floor": 0.001,
     "mic_calibration_device": "",
@@ -213,7 +216,7 @@ class Database:
         except (ValueError, TypeError):
             return json.loads(json.dumps(DEFAULTS[key]))
 
-    def set_setting(self, key, value):
+    def validated_setting(self, key, value):
         if key not in DEFAULTS or type(value) is not type(DEFAULTS[key]):
             raise ValueError("Invalid setting.")
         if key == "preferred_name":
@@ -257,7 +260,17 @@ class Database:
             from nexis.utils.validation import approved_root
 
             value = [str(approved_root(p)) for p in value]
-        self.execute("INSERT OR REPLACE INTO settings VALUES (?,?)", (key, json.dumps(value)))
+        return value
+
+    def set_settings(self, values):
+        """Validate everything before atomically committing a related set of preferences."""
+        rows = [(key, json.dumps(self.validated_setting(key, value)))
+                for key, value in values.items()]
+        with self.lock, self.connection:
+            self.connection.executemany("INSERT OR REPLACE INTO settings VALUES (?,?)", rows)
+
+    def set_setting(self, key, value):
+        self.set_settings({key: value})
         self.prune()
 
     def set_appearance(self, selected, custom):

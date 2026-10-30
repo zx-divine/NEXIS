@@ -47,7 +47,7 @@ from nexis.ui.health_page import HealthPage
 from nexis.ui.workflow_studio import WorkflowStudio
 from nexis.ui.screen_page import ScreenPage
 from nexis.ui.desktop_page import DesktopPage
-from nexis.ui.updates_page import UpdatesPage
+from nexis.ui.updates_page import UpdatesPage, SoftwareUpdatesPanel
 from nexis.ui.doctor_page import DoctorPage
 from nexis.ui.launch_page import ModuleNavigation, WelcomePage
 
@@ -171,6 +171,10 @@ class MainWindow(QMainWindow):
         self.add_page("Desktop Companion", self.desktop_experience)
         self.updates_page = UpdatesPage(self)
         self.add_page("Updates", self.updates_page)
+        self.settings_page.software_updates = SoftwareUpdatesPanel(self.updates_page)
+        self.settings_page.general_layout.insertWidget(
+            self.settings_page.general_layout.count() - 1, self.settings_page.software_updates
+        )
         self.doctor = DoctorPage(self)
         self.add_page("NEXIS Doctor", self.doctor)
         about = QWidget()
@@ -524,6 +528,7 @@ class MainWindow(QMainWindow):
         elif any(job.isRunning() for job in self.ai_jobs):
             for job in self.ai_jobs:
                 job.cancel.set()
+            self.set_state("IDLE")
         elif self.drawer.isVisible():
             self.toggle_drawer(False)
         else:
@@ -623,28 +628,60 @@ class MainWindow(QMainWindow):
         if self.closing:
             return
         if state == "PAUSED":
-            self.assistant_state = ReactorState.IDLE
-            self.reactor.set_state(ReactorState.IDLE)
+            self.set_state("IDLE")
             self.header_state.setText("●  WORKFLOW PAUSED")
             return
         state = {"THINKING": "PROCESSING", "TRANSCRIBING": "PROCESSING", "CANCELLED": "IDLE"}.get(
             state, state
         )
-        if state == "IDLE" and self.microphone_muted:
+        # Permission review wins over nested worker events. Hard mute suppresses
+        # all microphone/speech activity. Playback outranks a completion settle.
+        review = getattr(self, "_approval_cancel", None)
+        if review is not None and not review.is_set():
+            state = "WAITING_PERMISSION"
+        elif self.microphone_muted and state in {"IDLE", "LISTENING", "SPEAKING"}:
             state = "MUTED"
+        elif self.voice.speech_playing and state not in {"WAITING_PERMISSION", "ERROR"}:
+            state = "SPEAKING"
+        elif state == "LISTENING" and not (self.voice.capture_active or
+                getattr(self.desktop_experience.wake, "microphone_active", False)):
+            state = "PROCESSING"
+        elif state == "SPEAKING" and not self.voice.speech_playing:
+            state = "PROCESSING"
+        elif state == "IDLE" and (self.voice.capture_active or
+                getattr(self.desktop_experience.wake, "microphone_active", False)):
+            state = "LISTENING"
         self.assistant_state = ReactorState(state)
         self.reactor.set_state(self.assistant_state)
         self.welcome.reactor.set_state(self.assistant_state)
-        if self.assistant_state in {ReactorState.WAITING_PERMISSION, ReactorState.MUTED, ReactorState.OFFLINE}:
-            self.voice.reactor.set_state(self.assistant_state)
+        self.voice.reactor.set_state(self.assistant_state)
         self.header_state.setText("●  " + self.assistant_state.value)
+
+    def onboarding_finished(self):
+        """Always introduce all three modes once; keep the saved future launch preference."""
+        self.refresh()
+        self.settings_page.provider.reload_saved()
+        self.settings_page.reload_profile()
+        self.apply_theme()
+        self.navigate("Welcome")
 
     def voice_state(self, state):
         if not (self.worker and self.worker.isRunning()):
             self.set_state(state)
 
+    def set_audio_level(self, level):
+        if self.closing:
+            return
+        if self.microphone_muted:
+            level = None
+        for core in (self.reactor, self.welcome.reactor, self.voice.reactor):
+            core.set_audio_level(level)
+        if hasattr(self, "desktop_experience") and self.desktop_experience.orb:
+            self.desktop_experience.orb.reactor.set_audio_level(level)
+
     def settle_state(self):
-        if not self.closing and not (self.worker and self.worker.isRunning()):
+        if (not self.closing and not (self.worker and self.worker.isRunning())
+                and not any(job.isRunning() for job in self.ai_jobs)):
             self.set_state(ReactorState.IDLE)
 
     def selected_profile(self):
@@ -790,6 +827,8 @@ class MainWindow(QMainWindow):
             self.ai_jobs.remove(job)
         if self.current_ai is job:
             self.current_ai = None
+            if job.cancel.is_set() and not self.closing:
+                self.set_state("IDLE")
 
     @safe_ui
     def start_services(self):
@@ -803,7 +842,7 @@ class MainWindow(QMainWindow):
         self.settings_page.voice_setup.refresh_model()
         self.settings_page.voice_setup.start_speech()
         self.desktop_experience.start_if_enabled()
-        self.updates_page.auto_check_if_due()
+        self.updates_page.start()
         if self.discovery.stale():
             self.discovery.scan()
         self.discovery_timer = QTimer(self)
@@ -935,11 +974,16 @@ class MainWindow(QMainWindow):
                                     allow_radio=origin != "voice" or getattr(self.voice, "radio_reviewed", False))
         self.pause_workflow_button.setText("Pause workflow")
         self.pause_workflow_button.setEnabled(text.lower().startswith("run "))
-        self.worker.permission.connect(self.permission)
-        self.worker.phase.connect(self.set_state)
-        self.worker.step.connect(self.step_result)
-        self.worker.finished_result.connect(self.result)
-        self.worker.finished.connect(self.command_finished)
+        worker = self.worker
+
+        def active():
+            return self.worker is worker and not worker.cancel.is_set() and not self.closing
+
+        self.worker.permission.connect(lambda preview: self.permission(preview) if active() else worker.respond(False))
+        self.worker.phase.connect(lambda phase: self.set_state(phase) if active() else None)
+        self.worker.step.connect(lambda index, result: self.step_result(index, result) if active() else None)
+        self.worker.finished_result.connect(lambda result: self.result(result) if active() else None)
+        self.worker.finished.connect(lambda: self.command_finished() if self.worker is worker else None)
         self.worker.start()
 
     def permission(self, preview):
@@ -1012,6 +1056,7 @@ class MainWindow(QMainWindow):
         if self.worker and self.worker.isRunning():
             self.worker.cancel.set()
             self.worker.respond(False)
+            self.set_state("IDLE")
             self.output.appendPlainText(
                 "Stop requested. Already launched applications remain open."
             )
@@ -1084,6 +1129,13 @@ class MainWindow(QMainWindow):
             )
 
     def closeEvent(self, event):
+        self.updates_page.shutdown()
+        if not self.closing:
+            self.voice.capture_active = self.voice.speech_playing = False
+            self.desktop_experience.wake.microphone_active = False
+            self.set_audio_level(None)
+            self.set_state("IDLE")
+        self.suspend_visuals(True)
         self.closing = True
         self.desktop_experience.wake.stop()
         if self.global_launcher:

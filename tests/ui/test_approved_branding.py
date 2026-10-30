@@ -1,8 +1,10 @@
 """The owner-approved source, N-only shell assets and DPI presentation contract."""
 
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
+import shutil
 
 from PIL import Image, ImageChops
 import pytest
@@ -15,6 +17,11 @@ ROOT = Path(__file__).resolve().parents[2]
 APPROVED_SHA256 = "cee617446391da8bf0f3d348f96e0f629e11aa8c9dc9e30356c577d721794b4c"
 
 
+def generator():
+    spec = importlib.util.spec_from_file_location("approved_branding", ROOT / "scripts/prepare_branding.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def test_approved_artwork_identity_and_asset_manifest():
@@ -31,7 +38,7 @@ def test_approved_artwork_identity_and_asset_manifest():
             with Image.open(path) as image:
                 assert list(image.size) == row["pixels"]
                 image.verify()
-    for name in ("NEXIS_logo.png", "NEXIS_symbol.png", "NEXIS.ico"):
+    for name in generator().PACKAGE_ASSETS:
         assert (directory / name).read_bytes() == asset(name).read_bytes()
 
 
@@ -49,8 +56,23 @@ def test_icon_frames_use_symbol_instead_of_whole_wordmark():
         assert large.getpixel((128, 130))[0] > 100
 
 
+def test_generation_is_repeatable_and_preserves_original(tmp_path):
+    directory = tmp_path / "assets/branding"
+    directory.mkdir(parents=True)
+    original = ROOT / "assets/branding/NEXIS LOGO.png"
+    shutil.copyfile(original, directory / original.name)
+    first = generator().generate(tmp_path)
+    assert generator().generate(tmp_path) == first
+    assert (directory / original.name).read_bytes() == original.read_bytes()
 
 
+def test_unapproved_source_is_rejected_before_writing(tmp_path):
+    directory = tmp_path / "assets/branding"
+    directory.mkdir(parents=True)
+    (directory / "NEXIS LOGO.png").write_bytes(b"unapproved artwork")
+    with pytest.raises(ValueError, match="Approved source hash changed"):
+        generator().generate(tmp_path)
+    assert {path.name for path in directory.iterdir()} == {"NEXIS LOGO.png"}
 
 
 @pytest.mark.parametrize("ratio", (1.0, 1.5, 2.0, 3.0))

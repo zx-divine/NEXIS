@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
 from nexis.core.voice import VoiceWorker, setup_status
 from nexis.core.audio import input_options, level_percent
 from nexis.ui.pages import button, heading
-from nexis.ui.reactor import ReactorState, ReactorWidget
+from nexis.ui.reactor import ReactorWidget
 
 
 class ChatPage(QWidget):
@@ -110,6 +110,7 @@ class ChatPage(QWidget):
             job.cancel.set()
             if hasattr(job, "respond"):
                 job.respond(False)
+        self.window.set_state("IDLE")
         self.stream_item = None
         self.messages.clear()
         self.input.clear()
@@ -150,6 +151,7 @@ class ChatPage(QWidget):
     def cancel_ai(self):
         for job in self.window.ai_jobs:
             job.cancel.set()
+        self.window.set_state("IDLE")
         self.add_message(
             "NEXIS", "AI request cancelled. Any in-flight network read will stop at its timeout."
         )
@@ -167,6 +169,9 @@ class VoicePage(QWidget):
         self.radio_reviewed = False
         self.speech_id = None
         self.speech_service = None
+        self.speech_generation = None
+        self.speech_playing = False
+        self.capture_active = False
         self.turn_error = False
         self.metrics = {}
         self.hands_free_armed = False
@@ -247,12 +252,7 @@ class VoicePage(QWidget):
                 else " — MICROPHONE OFF"
             )
         )
-        visual = {"TRANSCRIBING": "PROCESSING", "THINKING": "PROCESSING", "CANCELLED": "IDLE"}.get(
-            value, value
-        )
-        if visual == "IDLE" and self.window.microphone_muted:
-            visual = "MUTED"
-        self.reactor.set_state(ReactorState(visual))
+        # MainWindow resolves actual capture/playback and precedence for every core.
         self.state.emit(value)
         self.indicator.setProperty("state", "recording" if value == "LISTENING" else "")
         self.indicator.style().unpolish(self.indicator)
@@ -396,13 +396,20 @@ class VoicePage(QWidget):
     def voice_status(self, text):
         self.status.setText(text)
         if text.startswith("LISTENING"):
+            self.capture_active = True
             self.indicator.setText("LISTENING — MICROPHONE ACTIVE")
+            self.state.emit("LISTENING")
         elif text.startswith("TRANSCRIBING"):
+            self.capture_active = False
+            self.window.set_audio_level(None)
             self.change_state(VoiceState.TRANSCRIBING)
 
     def audio_level(self, value):
-        self.reactor.set_audio_level(value)
-        self.level.setValue(level_percent(value))
+        if not self.capture_active or self.window.microphone_muted or self.turn.state != VoiceState.LISTENING:
+            return
+        measured = level_percent(value)
+        self.window.set_audio_level(measured / 100.)
+        self.level.setValue(measured)
 
     def capture_measured(self, metrics):
         self.metrics = metrics
@@ -424,15 +431,18 @@ class VoicePage(QWidget):
         self.pending_transcript = text[:1000].strip()
 
     def failure(self, message):
+        self.capture_active = self.speech_playing = False
+        self.window.set_audio_level(None)
         self.turn_error = True
         self.status.setText(message)
         self.change_state(VoiceState.ERROR)
 
     def finished(self, worker=None, generation=None):
-        self.level.setValue(0)
-        self.reactor.set_audio_level(None)
         if worker is not self.worker or generation != self.turn.generation or self.window.closing:
             return
+        self.capture_active = False
+        self.level.setValue(0)
+        self.window.set_audio_level(None)
         if worker.cancel.is_set():
             self.cancelled()
         elif not self.turn_error and self.pending_transcript:
@@ -468,6 +478,10 @@ class VoicePage(QWidget):
         if self.speech_service is service:
             return
         self.speech_service = service
+        self.speech_playing = False
+        service.playback_started.connect(
+            lambda identifier: self.speech_started(service, identifier)
+        )
         service.playback_finished.connect(
             lambda identifier, outcome: self.speech_finished(service, identifier, outcome)
         )
@@ -521,21 +535,37 @@ class VoicePage(QWidget):
             )
             return
         self.attach_speech(panel.speech)
+        self.speech_playing = False
+        self.speech_generation = self.turn.generation
         self.change_state(VoiceState.SPEAKING)
-        self.status.setText("Windows speech is speaking the reply. Cancel stops playback.")
+        self.status.setText("Preparing Windows speech. Cancel stops playback.")
         self.speech_id = panel.speech.say(text)
         if self.speech_id is None:
             self.failure("Speech queue is full. The reply is retained; stop speech and retry.")
+
+    def speech_started(self, service, identifier):
+        if (service is not self.speech_service or identifier != self.speech_id
+                or self.speech_generation != self.turn.generation
+                or self.turn.state != VoiceState.SPEAKING
+                or self.window.closing or self.window.microphone_muted):
+            return
+        self.speech_playing = True
+        self.status.setText("Windows speech playback active. Cancel stops playback.")
+        # SAPI exposes activity events here, not PCM/RMS. No simulated amplitude.
+        self.state.emit("SPEAKING")
 
     def speech_finished(self, service, identifier, outcome):
         if (
             service is not self.speech_service
             or identifier != self.speech_id
+            or self.speech_generation != self.turn.generation
             or self.turn.state != VoiceState.SPEAKING
             or self.window.closing
         ):
             return
         self.speech_id = None
+        self.speech_playing = False
+        self.window.set_audio_level(None)
         if outcome == "PASS":
             self.change_state(VoiceState.IDLE)
             self.status.setText(
@@ -558,6 +588,8 @@ class VoicePage(QWidget):
         )
 
     def stop(self):
+        self.capture_active = self.speech_playing = False
+        self.window.set_audio_level(None)
         self.hands_free_armed = False
         self.turn.cancel()
         self.speech_id = None
